@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { MAPS } from "../data/maps";
 import { BRAWLERS } from "../data/brawlers";
-import { getRecommendations } from "../logic/recommendationEngine";
+import { getRecommendation } from "../data/recommendationEngine";
 
 const mapsByMode = MAPS.reduce((acc, m) => {
   acc[m.mode] = acc[m.mode] || [];
