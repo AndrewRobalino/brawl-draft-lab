@@ -380,3 +380,264 @@ button {
   flex-shrink: 0;
   box-shadow: 0 0 0 2px rgba(0, 255, 255, 0.35);
 }
+/* ---------- Brawler tiles & MUST PICK glow ---------- */
+
+.brawler-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.brawler-tile {
+  position: relative;
+  border-radius: 0.9rem;
+  background: var(--surface-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 0.5rem 0.6rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.brawler-tile:hover:not(.disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(0, 255, 255, 0.6);
+  box-shadow: 0 0 18px rgba(0, 255, 255, 0.25);
+}
+
+.brawler-tile.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.brawler-tile.recommended {
+  border-color: rgba(0, 255, 255, 0.6);
+  box-shadow: 0 0 14px rgba(0, 255, 255, 0.28);
+}
+
+.brawler-tile.must {
+  animation: mustGlow 1.6s ease-in-out infinite alternate;
+  border-color: transparent;
+}
+
+@keyframes mustGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.0);
+    background: radial-gradient(circle at top left,
+      rgba(0, 255, 255, 0.55),
+      transparent 55%);
+  }
+  50% {
+    box-shadow: 0 0 22px 0 rgba(255, 0, 255, 0.45);
+    background: radial-gradient(circle at bottom right,
+      rgba(255, 0, 255, 0.4),
+      transparent 60%);
+  }
+  100% {
+    box-shadow: 0 0 26px 0 rgba(255, 255, 0, 0.55);
+    background: radial-gradient(circle at center,
+      rgba(255, 255, 0, 0.5),
+      transparent 65%);
+  }
+}
+
+.brawler-portrait {
+  width: 64px;
+  height: 64px;
+  border-radius: 0.8rem;
+  object-fit: cover;
+}
+
+.brawler-name {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-strong); /* force light text */
+}
+
+.pending-label {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.5rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.3rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* ---------- Phase badge / current pick box ---------- */
+
+.draft-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.phase-badge {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.phase-bans {
+  border-color: rgba(255, 196, 0, 0.5);
+}
+
+.phase-picks {
+  border-color: rgba(0, 255, 255, 0.5);
+}
+
+.phase-done {
+  border-color: rgba(144, 238, 144, 0.6);
+}
+
+.current-pick-box {
+  margin-top: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.9rem;
+  background: radial-gradient(circle at top left,
+      rgba(0, 255, 255, 0.16),
+      transparent 60%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  animation: phasePulse 2.2s ease-in-out infinite;
+}
+
+.current-pick-label {
+  font-weight: 600;
+}
+
+.current-pick-side {
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
+
+.confirm-button {
+  white-space: nowrap;
+}
+
+@keyframes phasePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.0);
+  }
+  50% {
+    box-shadow: 0 0 16px 0 rgba(0, 255, 255, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.0);
+  }
+}
+
+/* ---------- Final VS overview layout ---------- */
+
+.final-overview {
+  margin-top: 1.5rem;
+}
+
+.final-title {
+  margin-bottom: 0.4rem;
+}
+
+.vs-layout {
+  margin-top: 0.75rem;
+  border-radius: 1.4rem;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: linear-gradient(
+    90deg,
+    #222c5f 0%,
+    #171926 50%,
+    #5f2128 100%
+  );
+}
+
+.vs-side {
+  padding: 0.9rem 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.vs-side-our {
+  background: radial-gradient(circle at top left,
+      rgba(0, 255, 255, 0.22),
+      transparent 60%);
+}
+
+.vs-side-enemy {
+  background: radial-gradient(circle at top right,
+      rgba(255, 0, 0, 0.22),
+      transparent 60%);
+}
+
+.vs-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  opacity: 0.9;
+}
+
+.vs-team-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.vs-slot {
+  width: 72px;
+  text-align: center;
+}
+
+.vs-slot img {
+  width: 72px;
+  height: 72px;
+  border-radius: 0.9rem;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.85);
+}
+
+.vs-slot-name {
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
+}
+
+.vs-center {
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+.win-chance {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Mobile tweak: shrink VS portraits a bit */
+@media (max-width: 640px) {
+  .vs-slot {
+    width: 60px;
+  }
+
+  .vs-slot img {
+    width: 60px;
+    height: 60px;
+  }
+}
