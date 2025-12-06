@@ -16,24 +16,24 @@ function groupMapsByMode() {
 }
 
 const MAPS_BY_MODE = groupMapsByMode();
+const TOTAL_BANS = 6;
 
 function getInitialState() {
   const defaultMode = "Gem Grab";
   const firstMap = (MAPS_BY_MODE[defaultMode] || [])[0];
+
   return {
     mode: defaultMode,
     mapId: firstMap ? firstMap.id : null,
-    firstPick: true,
+    firstPick: null, // user must choose first or last pick
     bans: [],
     ourPicks: [],
     enemyPicks: [],
-    phase: "bans", // "bans" | "picks" | "done"
+    phase: "setup", // "setup" | "bans" | "picks" | "done"
     search: "",
     pendingPick: null,
   };
 }
-
-const TOTAL_BANS = 6;
 
 export function DraftSimulator({ advanced }) {
   const [state, setState] = useState(getInitialState);
@@ -48,43 +48,63 @@ export function DraftSimulator({ advanced }) {
     [state.bans, state.ourPicks, state.enemyPicks]
   );
 
+  const setupReady =
+    state.firstPick !== null && !!state.mode && !!state.mapId;
+
   const currentPickInfo = useMemo(() => {
+    if (state.phase === "setup") {
+      return {
+        label: "Draft setup",
+        side: null,
+        pickingIsUs: false,
+      };
+    }
+
     if (state.phase === "bans") {
       const num = state.bans.length + 1;
       return {
         label: `Ban ${num} / ${TOTAL_BANS}`,
         side: num % 2 === 1 ? "Your ban" : "Enemy ban",
-        pickingIsUs: true,
+        pickingIsUs: true, // bans are always “ours” to input
       };
     }
+
     const our = state.ourPicks.length;
     const enemy = state.enemyPicks.length;
     const total = our + enemy;
-    if (total >= 6) {
+
+    if (total >= 6 || state.phase === "done") {
       return { label: "Draft complete", side: null, pickingIsUs: false };
     }
+
+    // Worlds-style ABBAAB pattern
     const pattern = ["A", "B", "B", "A", "A", "B"];
     const turn = pattern[total];
     const ourSide = state.firstPick ? "A" : "B";
     const pickingIsUs = turn === ourSide;
+
     return {
       label: `Pick ${total + 1} / 6`,
       side: pickingIsUs ? "Your pick" : "Enemy pick",
       pickingIsUs,
     };
-  }, [state.phase, state.bans.length, state.ourPicks.length, state.enemyPicks.length, state.firstPick]);
+  }, [
+    state.phase,
+    state.bans.length,
+    state.ourPicks.length,
+    state.enemyPicks.length,
+    state.firstPick,
+  ]);
 
-  const filteredBrawlers = useMemo(() => {
-    const q = state.search.trim().toLowerCase();
-    return BRAWLERS.filter((b) => {
-      if (takenSet.has(b.id)) return false;
-      if (!q) return true;
-      return b.name.toLowerCase().includes(q) || b.id.toLowerCase().includes(q);
-    });
-  }, [state.search, takenSet]);
+  const isOurTurn =
+    state.phase === "picks" && !!currentMap && currentPickInfo.pickingIsUs;
 
+  // Recommendations only when:
+  // - we’re past bans
+  // - it’s *our* turn to pick
+  // - we have a map selected
   const recommendations = useMemo(() => {
-    if (state.phase === "bans" || !currentMap) return [];
+    if (!isOurTurn || !currentMap) return [];
     try {
       return getRecommendations({
         mapId: currentMap.id,
@@ -97,7 +117,42 @@ export function DraftSimulator({ advanced }) {
       console.error("Recommendation error", e);
       return [];
     }
-  }, [state.phase, currentMap, state.ourPicks, state.enemyPicks, state.bans, advanced]);
+  }, [
+    isOurTurn,
+    currentMap,
+    state.ourPicks,
+    state.enemyPicks,
+    state.bans,
+    advanced,
+  ]);
+
+  // Brawlers shown in the main grid:
+  // - If search is typed: any matching brawler (not taken)
+  // - Else if it’s our turn & we have recommendations: only those recommended
+  // - Else (enemy turn / bans): show nothing in the grid
+  const visibleBrawlers = useMemo(() => {
+    if (!setupReady || state.phase === "setup") return [];
+
+    const q = state.search.trim().toLowerCase();
+    const available = BRAWLERS.filter((b) => !takenSet.has(b.id));
+
+    if (q) {
+      return available.filter(
+        (b) =>
+          b.name.toLowerCase().includes(q) ||
+          b.id.toLowerCase().includes(q)
+      );
+    }
+
+    if (isOurTurn && recommendations.length > 0) {
+      const recIds = new Set(recommendations.map((r) => r.id));
+      return available.filter((b) => recIds.has(b.id));
+    }
+
+    // During bans or enemy picks: grid stays minimal
+    if (state.phase === "bans") return available; // bans still need full list
+    return [];
+  }, [setupReady, state.phase, state.search, takenSet, isOurTurn, recommendations]);
 
   function resetDraft() {
     setState(getInitialState());
@@ -109,7 +164,7 @@ export function DraftSimulator({ advanced }) {
       ...getInitialState(),
       mode,
       mapId: maps[0] ? maps[0].id : null,
-      firstPick: prev.firstPick,
+      firstPick: prev.firstPick, // keep side selection
     }));
   }
 
@@ -121,13 +176,23 @@ export function DraftSimulator({ advanced }) {
     setState((prev) => ({ ...prev, firstPick: value }));
   }
 
+  function startDraft() {
+    if (!setupReady) return;
+    setState((prev) => ({
+      ...prev,
+      phase: "bans",
+      pendingPick: null,
+    }));
+  }
+
   function handleBrawlerClick(id) {
     if (takenSet.has(id)) return;
+    if (state.phase === "setup") return;
     setState((prev) => ({ ...prev, pendingPick: id }));
   }
 
   function confirmPending() {
-    if (!state.pendingPick) return;
+    if (!state.pendingPick || state.phase === "setup") return;
     const id = state.pendingPick;
 
     if (state.phase === "bans") {
@@ -140,26 +205,37 @@ export function DraftSimulator({ advanced }) {
       return;
     }
 
-    // picks
+    // Picks
     setState((prev) => {
       const our = [...prev.ourPicks];
       const enemy = [...prev.enemyPicks];
       const total = our.length + enemy.length;
+
       if (total >= 6) {
         return { ...prev, pendingPick: null, phase: "done" };
       }
+
       const pattern = ["A", "B", "B", "A", "A", "B"];
       const turn = pattern[total];
       const ourSide = prev.firstPick ? "A" : "B";
       const pickingIsUs = turn === ourSide;
+
       if (pickingIsUs) {
         our.push(id);
       } else {
         enemy.push(id);
       }
+
       const newTotal = our.length + enemy.length;
       const phase = newTotal >= 6 ? "done" : "picks";
-      return { ...prev, ourPicks: our, enemyPicks: enemy, pendingPick: null, phase };
+
+      return {
+        ...prev,
+        ourPicks: our,
+        enemyPicks: enemy,
+        pendingPick: null,
+        phase,
+      };
     });
   }
 
@@ -171,353 +247,438 @@ export function DraftSimulator({ advanced }) {
   const bansRemaining = TOTAL_BANS - state.bans.length;
 
   return (
-    <div className="page-grid">
-      <section className="card">
-        <div className="card-header">
+    <div className="page">
+      <div className="page-header">
+        <h1>Brawl Draft Lab – Draft Simulator</h1>
+        <p className="page-subtitle">
+          Step through Worlds-style drafts with bans, picks and live suggestions.
+        </p>
+        <button className="reset-button" onClick={resetDraft}>
+          Reset draft
+        </button>
+      </div>
+
+      {/* SETUP */}
+      <section className="section-card">
+        <h2>Draft setup</h2>
+        <p className="muted">
+          Follow the real draft order: pick side, mode &amp; map, then lock bans and
+          picks in order.
+        </p>
+
+        <div className="draft-setup-grid">
           <div>
-            <div className="card-title">Draft setup</div>
-            <div className="card-subtitle">
-              Pick mode, map and side. Then follow bans and picks in real time.
-            </div>
-          </div>
-          <button className="btn-ghost" onClick={resetDraft}>
-            Reset draft
-          </button>
-        </div>
-
-        <div className="section-title">Game mode</div>
-        <div className="chips-row" style={{ marginBottom: 8 }}>
-          {MODES.map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              className={"btn-ghost" + (state.mode === mode ? " active" : "")}
-              onClick={() => handleModeChange(mode)}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-
-        <div className="section-title" style={{ marginTop: 10 }}>Map</div>
-        <div className="section-caption">
-          These maps are from the Worlds-style pool and current ranked rotation.
-        </div>
-        <div className="map-grid">
-          {(MAPS_BY_MODE[state.mode] || []).map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              className={"map-tile" + (state.mapId === m.id ? " selected" : "")}
-              onClick={() => handleMapSelect(m.id)}
-            >
-              {m.image && <img src={m.image} alt={m.name} loading="lazy" />}
-              <div className="map-tile-footer">
-                <div className="map-name">{m.name}</div>
-                <div className="map-mode">{m.mode}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginTop: 12,
-            gap: 10,
-          }}
-        >
-          <div>
-            <div className="section-title">Side</div>
-            <div className="section-caption">
-              Choose whether your team has first pick or last pick.
-            </div>
-          </div>
-          <div className="chips-row">
-            <button
-              type="button"
-              className={"btn-ghost" + (state.firstPick ? " active" : "")}
-              onClick={() => handleFirstPickToggle(true)}
-            >
-              First pick
-            </button>
-            <button
-              type="button"
-              className={"btn-ghost" + (!state.firstPick ? " active" : "")}
-              onClick={() => handleFirstPickToggle(false)}
-            >
-              Last pick
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="card-header">
-          <div>
-            <div className="card-title">Live draft</div>
-            <div className="card-subtitle">
-              Click a brawler to mark it pending, then confirm to lock bans & picks.
-            </div>
-          </div>
-          <div className="pill">
-            {state.phase === "bans"
-              ? `${bansRemaining} ban${bansRemaining === 1 ? "" : "s"} left`
-              : state.phase === "picks"
-              ? "Picking phase"
-              : "Draft complete"}
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 8,
-            gap: 10,
-          }}
-        >
-          <div>
-            <div className="section-title">{currentPickInfo.label}</div>
-            <div className="section-caption">
-              {currentPickInfo.side
-                ? `${currentPickInfo.side}: choose a brawler below, then confirm.`
-                : "You can still explore suggestions or reset to run it back."}
-            </div>
-          </div>
-          <button
-            className="btn-primary"
-            disabled={!state.pendingPick}
-            onClick={confirmPending}
-          >
-            Confirm
-          </button>
-        </div>
-
-        <div className="draft-layout" style={{ marginBottom: 10 }}>
-          <div className="draft-side">
-            <div className="draft-side-header">
-              <div>
-                <div className="section-title">Your side</div>
-                <div className="section-caption">
-                  Track your bans and picks as you go.
-                </div>
-              </div>
-              <span className={state.firstPick ? "badge-first" : "badge-last"}>
-                {state.firstPick ? "First pick" : "Last pick"}
-              </span>
-            </div>
-            <div className="section-title">Bans</div>
-            <div className="chips-row" style={{ marginBottom: 6 }}>
-              {state.bans.map((id) => {
-                const b = BRAWLERS.find((x) => x.id === id);
-                return (
-                  <div key={id} className="chip">
-                    {b?.image && <img src={b.image} alt={b.name} />}
-                    <span className="chip-label-strong">{b?.name || id}</span>
-                    <span className="chip-meta">Ban</span>
-                  </div>
-                );
-              })}
-              {!state.bans.length && (
-                <span className="chip-meta">No bans locked yet</span>
-              )}
-            </div>
-            <div className="section-title">Your picks</div>
-            <div className="chips-row">
-              {state.ourPicks.map((id) => {
-                const b = BRAWLERS.find((x) => x.id === id);
-                return (
-                  <div key={id} className="chip">
-                    {b?.image && <img src={b.image} alt={b.name} />}
-                    <span className="chip-label-strong">{b?.name || id}</span>
-                    <span className="chip-meta">You</span>
-                  </div>
-                );
-              })}
-              {!state.ourPicks.length && (
-                <span className="chip-meta">No picks yet</span>
-              )}
-            </div>
-          </div>
-
-          <div className="draft-side">
-            <div className="draft-side-header">
-              <div>
-                <div className="section-title">Enemy side</div>
-                <div className="section-caption">
-                  Mirror their picks so the suggestions stay accurate.
-                </div>
-              </div>
-            </div>
-            <div className="section-title">Enemy picks</div>
-            <div className="chips-row">
-              {state.enemyPicks.map((id) => {
-                const b = BRAWLERS.find((x) => x.id === id);
-                return (
-                  <div key={id} className="chip">
-                    {b?.image && <img src={b.image} alt={b.name} />}
-                    <span className="chip-label-strong">{b?.name || id}</span>
-                    <span className="chip-meta">Enemy</span>
-                  </div>
-                );
-              })}
-              {!state.enemyPicks.length && (
-                <span className="chip-meta">No enemy picks yet</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 6,
-            gap: 10,
-          }}
-        >
-          <div>
-            <div className="section-title">Brawler search</div>
-            <div className="section-caption">
-              Type to filter quickly. Click a brawler, then confirm.
-            </div>
-          </div>
-          <input
-            className="inline-input"
-            placeholder="Search by name…"
-            value={state.search}
-            onChange={(e) =>
-              setState((prev) => ({ ...prev, search: e.target.value }))
-            }
-            style={{ maxWidth: 220 }}
-          />
-        </div>
-
-        <div className="brawler-grid">
-          {filteredBrawlers.map((b) => {
-            const isPending = state.pendingPick === b.id;
-            const rec = recommendations.find((r) => r.id === b.id);
-            const classNames = [
-              "brawler-tile",
-              takenSet.has(b.id) ? "disabled" : "",
-              rec ? "recommended" : "",
-              rec && rec.mustPick ? "must" : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
-
-            return (
+            <h3>Side</h3>
+            <p className="muted">
+              Step 1 – choose whether your team has first pick or last pick.
+            </p>
+            <div className="side-toggle">
               <button
-                key={b.id}
-                type="button"
-                className={classNames}
-                onClick={() => handleBrawlerClick(b.id)}
-                disabled={takenSet.has(b.id)}
+                className={
+                  state.firstPick === true
+                    ? "chip chip-primary"
+                    : "chip chip-ghost"
+                }
+                onClick={() => handleFirstPickToggle(true)}
               >
-                {b.image && <img src={b.image} alt={b.name} loading="lazy" />}
-                <div className="brawler-name">
-                  {b.name}
-                  {isPending && (
-                    <span style={{ color: "#38bdf8", display: "block" }}>
-                      Pending
-                    </span>
-                  )}
-                </div>
+                First pick
               </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="card" style={{ gridColumn: "1 / -1", marginTop: 8 }}>
-        <div className="card-header">
-          <div>
-            <div className="card-title">Recommended picks</div>
-            <div className="card-subtitle">
-              Suggestions using Worlds-style data, map mode, bans and comp shape.
+              <button
+                className={
+                  state.firstPick === false
+                    ? "chip chip-primary"
+                    : "chip chip-ghost"
+                }
+                onClick={() => handleFirstPickToggle(false)}
+              >
+                Last pick
+              </button>
             </div>
           </div>
-        </div>
 
-        {state.phase === "bans" && (
-          <div className="section-caption">
-            Lock all six bans first — suggestions will appear once picks start.
+          <div>
+            <h3>Game mode</h3>
+            <p className="muted">Step 2 – select the mode you’re playing.</p>
+            <div className="mode-chips">
+              {MODES.map((mode) => (
+                <button
+                  key={mode}
+                  className={
+                    state.mode === mode
+                      ? "chip chip-primary"
+                      : "chip chip-ghost"
+                  }
+                  onClick={() => handleModeChange(mode)}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
 
-        {state.phase !== "bans" && recommendations.length === 0 && (
-          <div className="section-caption">
-            No clear read yet. Try adding more picks or adjusting the bans.
-          </div>
-        )}
-
-        {state.phase !== "bans" && recommendations.length > 0 && (
-          <div className="recommendations-list">
-            {recommendations.map((r) => (
-              <div
-                key={r.id}
-                className="rec-card"
-                style={
-                  r.mustPick
-                    ? {
-                        borderImage:
-                          "linear-gradient(120deg,#f97316,#facc15,#22c55e,#38bdf8,#a855f7) 1",
-                        borderWidth: 2,
-                        borderStyle: "solid",
-                      }
-                    : undefined
-                }
-              >
-                <div>
-                  {r.image && (
-                    <img
-                      src={r.image}
-                      alt={r.name}
-                      style={{
-                        width: 46,
-                        height: 46,
-                        borderRadius: 14,
-                        objectFit: "cover",
-                        display: "block",
-                      }}
+          <div>
+            <h3>Map</h3>
+            <p className="muted">
+              Step 3 – choose the exact map from the current pool.
+            </p>
+            <div className="map-grid">
+              {(MAPS_BY_MODE[state.mode] || []).map((m) => (
+                <button
+                  key={m.id}
+                  className={
+                    state.mapId === m.id
+                      ? "map-tile map-tile-selected"
+                      : "map-tile"
+                  }
+                  onClick={() => handleMapSelect(m.id)}
+                >
+                  {m.image && (
+                    <div
+                      className="map-image"
+                      style={{ backgroundImage: `url(${m.image})` }}
                     />
                   )}
+                  <div className="map-label">
+                    <div className="map-name">{m.name}</div>
+                    <div className="map-mode">{m.mode}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="start-draft-row">
+          <button
+            className="primary-button"
+            onClick={startDraft}
+            disabled={!setupReady || state.phase !== "setup"}
+          >
+            {setupReady
+              ? "Start bans"
+              : "Pick side + map to start draft"}
+          </button>
+          {state.phase !== "setup" && (
+            <span className="muted small">
+              Setup locked in. Use Reset if you need to run it back.
+            </span>
+          )}
+        </div>
+      </section>
+
+      {/* LIVE DRAFT */}
+      <section className="section-card draft-section">
+        <div className="draft-layout">
+          {/* Left column – status & history */}
+          <div className="draft-status-column">
+            <div className="draft-phase-header">
+              <span className={`phase-badge phase-${state.phase}`}>
+                {state.phase === "setup"
+                  ? "Setup"
+                  : state.phase === "bans"
+                  ? "Bans"
+                  : state.phase === "picks"
+                  ? "Picks"
+                  : "Done"}
+              </span>
+              <h2>Live draft</h2>
+            </div>
+
+            <p className="muted">
+              {state.phase === "setup" &&
+                "Lock your side, mode and map, then start bans to begin the draft."}
+              {state.phase === "bans" &&
+                `${bansRemaining} ban${
+                  bansRemaining === 1 ? "" : "s"
+                } left. Click a brawler then Confirm to lock each ban.`}
+              {state.phase === "picks" &&
+                (currentPickInfo.pickingIsUs
+                  ? "It’s your pick. Choose a brawler below, then Confirm."
+                  : "Enemy pick – mirror their choice so suggestions stay accurate.")}
+              {state.phase === "done" &&
+                "Draft is finished. You can review the teams or reset to run it back."}
+            </p>
+
+            <div className="current-pick-box">
+              <div className="current-pick-label">
+                {currentPickInfo.label}
+              </div>
+              {currentPickInfo.side && (
+                <div className="current-pick-side">
+                  {currentPickInfo.side}
                 </div>
-                <div className="rec-card-main">
-                  <div className="rec-header-row">
-                    <div>
-                      <div className="rec-title">{r.name}</div>
-                      <div className="rec-tags">
-                        {r.tags.map((t) => (
-                          <span key={t} className="pill">
-                            {t}
-                          </span>
-                        ))}
-                        {r.mustPick && (
-                          <span className="rec-badge-must">MUST PICK</span>
+              )}
+              <button
+                className="primary-button confirm-button"
+                onClick={confirmPending}
+                disabled={!state.pendingPick || state.phase === "setup"}
+              >
+                Confirm
+              </button>
+            </div>
+
+            <div className="team-columns">
+              <div className="team-column">
+                <h3>Your side</h3>
+                <p className="muted">
+                  Track your bans and picks as you go.
+                </p>
+                <div className="side-tag">
+                  {state.firstPick === null
+                    ? "Side not set"
+                    : state.firstPick
+                    ? "First pick"
+                    : "Last pick"}
+                </div>
+
+                <h4>Bans</h4>
+                <div className="chip-row">
+                  {state.bans.length === 0 && (
+                    <span className="muted small">
+                      No bans locked yet.
+                    </span>
+                  )}
+                  {state.bans.map((id) => {
+                    const b = BRAWLERS.find((x) => x.id === id);
+                    return (
+                      <div key={id} className="brawler-chip">
+                        {b?.image && (
+                          <img
+                            src={b.image}
+                            alt={b?.name || id}
+                            className="brawler-chip-image"
+                          />
                         )}
+                        <span className="brawler-chip-name">
+                          {b?.name || id}
+                        </span>
+                        <span className="badge badge-ban">Ban</span>
                       </div>
-                    </div>
-                    <button
-                      className="btn-primary"
-                      onClick={() => handleUseRecommendation(r.id)}
-                    >
-                      Use this pick
-                    </button>
-                  </div>
-                  <div className="rec-explainer">
-                    {advanced ? r.longExplanation : r.shortExplanation}
-                  </div>
+                    );
+                  })}
+                </div>
+
+                <h4>Your picks</h4>
+                <div className="chip-row">
+                  {state.ourPicks.length === 0 && (
+                    <span className="muted small">
+                      No picks yet.
+                    </span>
+                  )}
+                  {state.ourPicks.map((id) => {
+                    const b = BRAWLERS.find((x) => x.id === id);
+                    return (
+                      <div key={id} className="brawler-chip">
+                        {b?.image && (
+                          <img
+                            src={b.image}
+                            alt={b?.name || id}
+                            className="brawler-chip-image"
+                          />
+                        )}
+                        <span className="brawler-chip-name">
+                          {b?.name || id}
+                        </span>
+                        <span className="badge badge-you">You</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            ))}
+
+              <div className="team-column">
+                <h3>Enemy side</h3>
+                <p className="muted">
+                  Mirror their picks so suggestions stay accurate.
+                </p>
+
+                <h4>Enemy picks</h4>
+                <div className="chip-row">
+                  {state.enemyPicks.length === 0 && (
+                    <span className="muted small">
+                      No enemy picks yet.
+                    </span>
+                  )}
+                  {state.enemyPicks.map((id) => {
+                    const b = BRAWLERS.find((x) => x.id === id);
+                    return (
+                      <div key={id} className="brawler-chip">
+                        {b?.image && (
+                          <img
+                            src={b.image}
+                            alt={b?.name || id}
+                            className="brawler-chip-image"
+                          />
+                        )}
+                        <span className="brawler-chip-name">
+                          {b?.name || id}
+                        </span>
+                        <span className="badge badge-enemy">Enemy</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* Right column – search + recommendations */}
+          <div className="draft-action-column">
+            <div className="search-header">
+              <h3>Brawler search</h3>
+              <p className="muted">
+                Type to filter, or tap a recommended pick when it’s your turn.
+              </p>
+              <input
+                type="text"
+                value={state.search}
+                onChange={(e) =>
+                  setState((prev) => ({ ...prev, search: e.target.value }))
+                }
+                placeholder="Search brawler name…"
+                className="search-input"
+              />
+            </div>
+
+            {state.phase === "setup" && (
+              <div className="muted">
+                Complete setup and start bans to unlock the draft tools.
+              </div>
+            )}
+
+            {state.phase !== "setup" && (
+              <>
+                <div className="brawler-grid">
+                  {visibleBrawlers.map((b) => {
+                    const isPending = state.pendingPick === b.id;
+                    const rec = recommendations.find((r) => r.id === b.id);
+                    const classNames = [
+                      "brawler-tile",
+                      takenSet.has(b.id) ? "disabled" : "",
+                      rec ? "recommended" : "",
+                      rec && rec.mustPick ? "must" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+
+                    return (
+                      <button
+                        key={b.id}
+                        className={classNames}
+                        onClick={() => handleBrawlerClick(b.id)}
+                        disabled={takenSet.has(b.id)}
+                      >
+                        {b.image && (
+                          <img
+                            src={b.image}
+                            alt={b.name}
+                            className="brawler-portrait"
+                          />
+                        )}
+                        <div className="brawler-name">{b.name}</div>
+                        {isPending && (
+                          <div className="pending-label">Pending</div>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {visibleBrawlers.length === 0 && (
+                    <div className="muted small">
+                      {state.phase === "bans"
+                        ? "No brawlers available (check bans / picks)."
+                        : currentPickInfo.pickingIsUs
+                        ? "No recommended picks – try searching by name."
+                        : "Enemy pick – input their choice, then suggestions will resume on your turn."}
+                    </div>
+                  )}
+                </div>
+
+                <div className="recommendations-panel">
+                  <h3>Recommended picks</h3>
+                  <p className="muted">
+                    Suggestions using Worlds-style data, map mode, bans and
+                    comp shape.
+                  </p>
+
+                  {state.phase === "bans" && (
+                    <p className="muted small">
+                      Lock all six bans first — suggestions start once picks
+                      begin.
+                    </p>
+                  )}
+
+                  {state.phase === "picks" &&
+                    !isOurTurn && (
+                      <p className="muted small">
+                        Waiting for enemy pick. Mirror their choice above, then
+                        we’ll refresh suggestions on your turn.
+                      </p>
+                    )}
+
+                  {isOurTurn && recommendations.length === 0 && (
+                    <p className="muted small">
+                      No clear read yet. Try adding more picks or adjusting the
+                      bans.
+                    </p>
+                  )}
+
+                  {isOurTurn && recommendations.length > 0 && (
+                    <div className="recommendation-list">
+                      {recommendations.map((r) => (
+                        <div
+                          key={r.id}
+                          className={
+                            "recommendation-card" +
+                            (r.mustPick ? " recommendation-card-must" : "")
+                          }
+                        >
+                          <div className="recommendation-main">
+                            {r.image && (
+                              <img
+                                src={r.image}
+                                alt={r.name}
+                                className="recommendation-image"
+                              />
+                            )}
+                            <div>
+                              <div className="recommendation-name">
+                                {r.name}
+                              </div>
+                              <div className="tag-row">
+                                {r.tags.map((t) => (
+                                  <span key={t} className="badge badge-tag">
+                                    {t}
+                                  </span>
+                                ))}
+                                {r.mustPick && (
+                                  <span className="badge badge-must">
+                                    MUST PICK
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            className="secondary-button"
+                            onClick={() => handleUseRecommendation(r.id)}
+                          >
+                            Use this pick
+                          </button>
+                          <p className="muted small">
+                            {advanced ? r.longExplanation : r.shortExplanation}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* TODO: final overview style – we’ll build the full VS screen next pass */}
       </section>
     </div>
   );
