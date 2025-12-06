@@ -8,23 +8,11 @@ const TOTAL_BANS = 6;
 // Worlds-style ABBAAB pattern
 const PICK_PATTERN = ["A", "B", "B", "A", "A", "B"];
 
-function groupMapsByMode() {
-  const byMode = {};
-  for (const mode of MODES) byMode[mode] = [];
-  for (const m of MAPS) {
-    if (!byMode[m.mode]) byMode[m.mode] = [];
-    byMode[m.mode].push(m);
-  }
-  return byMode;
-}
-
-const MAPS_BY_MODE = groupMapsByMode();
-
 function getInitialState() {
   return {
     mode: null,
     mapId: null,
-    firstPick: null, // true = we are A (first), false = we are B (last)
+    firstPick: null, // true = we are A, false = we are B
     bans: [],
     ourPicks: [],
     enemyPicks: [],
@@ -42,22 +30,27 @@ export function DraftSimulator({ advanced }) {
     [state.mapId]
   );
 
+  // Safer: filter maps by mode every time (no pre-computed map)
+  const mapsForMode = useMemo(() => {
+    if (!state.mode) return [];
+    const target = state.mode.toLowerCase().trim();
+    return MAPS.filter(
+      (m) => (m.mode || "").toLowerCase().trim() === target
+    );
+  }, [state.mode]);
+
   const takenSet = useMemo(
     () => new Set([...state.bans, ...state.ourPicks, ...state.enemyPicks]),
     [state.bans, state.ourPicks, state.enemyPicks]
   );
 
-  // Step gating: you must choose side -> then mode -> then map
+  // Step gating
   const setupReady =
     state.firstPick !== null && !!state.mode && !!state.mapId;
 
   const currentPickInfo = useMemo(() => {
     if (state.phase === "setup") {
-      return {
-        label: "Draft setup",
-        side: null,
-        pickingIsUs: false,
-      };
+      return { label: "Draft setup", side: null, pickingIsUs: false };
     }
 
     if (state.phase === "bans") {
@@ -97,10 +90,7 @@ export function DraftSimulator({ advanced }) {
   const isOurTurn =
     state.phase === "picks" && !!currentMap && currentPickInfo.pickingIsUs;
 
-  // Recommendations only when:
-  // - we’re past bans
-  // - it’s *our* turn to pick
-  // - we have a map selected
+  // Recommendations
   const recommendations = useMemo(() => {
     if (!isOurTurn || !currentMap) return [];
     try {
@@ -124,39 +114,30 @@ export function DraftSimulator({ advanced }) {
     advanced,
   ]);
 
-  // Assign visual tiers to recommendations:
-  // - mustPick => rainbow MUST PICK
-  // - first non-must => META (gold)
-  // - next 1–2 => STRONG (cyan)
-  // - rest => FLEX (purple)
+  // Tier map for glow colors: must / meta / strong / flex
   const recommendationTiers = useMemo(() => {
-    const map = new Map();
+    const tierMap = new Map();
     recommendations.forEach((r, index) => {
       if (r.mustPick) {
-        map.set(r.id, "must");
+        tierMap.set(r.id, "must");
       } else if (index === 0) {
-        map.set(r.id, "meta");
+        tierMap.set(r.id, "meta");
       } else if (index <= 2) {
-        map.set(r.id, "strong");
+        tierMap.set(r.id, "strong");
       } else {
-        map.set(r.id, "flex");
+        tierMap.set(r.id, "flex");
       }
     });
-    return map;
+    return tierMap;
   }, [recommendations]);
 
-  // Brawlers shown in the main grid:
-  // - Setup: none
-  // - Bans: full list (minus taken), with search
-  // - Picks (our turn): recommendations only (unless searching)
-  // - Picks (enemy turn): empty grid (you manually mirror enemy in chips)
+  // Brawlers shown in the main grid
   const visibleBrawlers = useMemo(() => {
     if (!setupReady || state.phase === "setup") return [];
 
     const q = state.search.trim().toLowerCase();
     const available = BRAWLERS.filter((b) => !takenSet.has(b.id));
 
-    // If user is typing, always show search results
     if (q) {
       return available.filter(
         (b) =>
@@ -174,7 +155,6 @@ export function DraftSimulator({ advanced }) {
       return available.filter((b) => recIds.has(b.id));
     }
 
-    // Enemy pick / nothing to suggest
     return [];
   }, [
     setupReady,
@@ -185,7 +165,6 @@ export function DraftSimulator({ advanced }) {
     recommendations,
   ]);
 
-  // Teams for final overview
   const ourTeam = useMemo(
     () =>
       state.ourPicks
@@ -202,19 +181,18 @@ export function DraftSimulator({ advanced }) {
     [state.enemyPicks]
   );
 
-  // Very light-weight "win chance" – just gives a 35–65% band
   const winChance = useMemo(() => {
     if (state.phase !== "done" || !currentMap) return null;
-    const banFactor = state.bans.length / TOTAL_BANS; // 0–1
+    const banFactor = state.bans.length / TOTAL_BANS;
     const sideBonus = state.firstPick ? 2 : 0;
-    const raw = 48 + banFactor * 8 + sideBonus; // ~48–58
+    const raw = 48 + banFactor * 8 + sideBonus;
     const clamped = Math.max(35, Math.min(65, Math.round(raw)));
     return clamped;
   }, [state.phase, currentMap, state.bans.length, state.firstPick]);
 
   const bansRemaining = TOTAL_BANS - state.bans.length;
 
-  // ----------------- handlers -----------------
+  // ---------------- handlers ----------------
 
   function resetDraft() {
     setState(getInitialState());
@@ -222,20 +200,17 @@ export function DraftSimulator({ advanced }) {
 
   function handleFirstPickToggle(value) {
     setState((prev) =>
-      prev.phase !== "setup"
-        ? prev
-        : { ...prev, firstPick: value }
+      prev.phase !== "setup" ? prev : { ...prev, firstPick: value }
     );
   }
 
   function handleModeChange(mode) {
     setState((prev) => {
       if (prev.phase !== "setup") return prev;
-      const maps = MAPS_BY_MODE[mode] || [];
       return {
         ...prev,
         mode,
-        mapId: maps[0] ? maps[0].id : null,
+        mapId: null, // force user to pick a map
       };
     });
   }
@@ -275,7 +250,7 @@ export function DraftSimulator({ advanced }) {
       return;
     }
 
-    // Picks
+    // picks
     setState((prev) => {
       const our = [...prev.ourPicks];
       const enemy = [...prev.enemyPicks];
@@ -313,7 +288,7 @@ export function DraftSimulator({ advanced }) {
     setState((prev) => ({ ...prev, pendingPick: id }));
   }
 
-  // ----------------- render -----------------
+  // ---------------- render ----------------
 
   return (
     <div className="page">
@@ -327,12 +302,12 @@ export function DraftSimulator({ advanced }) {
         </button>
       </div>
 
-      {/* SETUP – side -> mode -> map */}
+      {/* SETUP */}
       <section className="section-card">
         <h2>Draft setup</h2>
         <p className="muted">
-          Follow the real draft order: pick side, mode &amp; map, then lock bans and
-          picks in order. Each step unlocks the next.
+          Follow the real draft order: pick side, mode &amp; map, then lock bans
+          and picks in order. Each step unlocks the next.
         </p>
 
         <div className="draft-setup-grid">
@@ -345,9 +320,7 @@ export function DraftSimulator({ advanced }) {
             <div className="side-toggle">
               <button
                 className={
-                  state.firstPick === true
-                    ? "chip chip-primary"
-                    : "chip chip-ghost"
+                  state.firstPick === true ? "chip chip-primary" : "chip chip-ghost"
                 }
                 onClick={() => handleFirstPickToggle(true)}
               >
@@ -355,9 +328,7 @@ export function DraftSimulator({ advanced }) {
               </button>
               <button
                 className={
-                  state.firstPick === false
-                    ? "chip chip-primary"
-                    : "chip chip-ghost"
+                  state.firstPick === false ? "chip chip-primary" : "chip chip-ghost"
                 }
                 onClick={() => handleFirstPickToggle(false)}
               >
@@ -380,9 +351,7 @@ export function DraftSimulator({ advanced }) {
                   <button
                     key={mode}
                     className={
-                      state.mode === mode
-                        ? "chip chip-primary"
-                        : "chip chip-ghost"
+                      state.mode === mode ? "chip chip-primary" : "chip chip-ghost"
                     }
                     onClick={() => handleModeChange(mode)}
                   >
@@ -396,22 +365,18 @@ export function DraftSimulator({ advanced }) {
           {/* Step 3 – map */}
           <div>
             <h3>Map</h3>
-            <p className="muted">
-              Step 3 – choose the exact map from the current pool.
-            </p>
+            <p className="muted">Step 3 – choose the exact map from the pool.</p>
             {!state.mode ? (
               <p className="muted small">
                 Select a game mode in Step 2 to unlock the map pool.
               </p>
             ) : (
               <div className="map-grid">
-                {(MAPS_BY_MODE[state.mode] || []).map((m) => (
+                {mapsForMode.map((m) => (
                   <button
                     key={m.id}
                     className={
-                      state.mapId === m.id
-                        ? "map-tile map-tile-selected"
-                        : "map-tile"
+                      state.mapId === m.id ? "map-tile map-tile-selected" : "map-tile"
                     }
                     onClick={() => handleMapSelect(m.id)}
                   >
@@ -427,6 +392,12 @@ export function DraftSimulator({ advanced }) {
                     </div>
                   </button>
                 ))}
+
+                {mapsForMode.length === 0 && (
+                  <p className="muted small">
+                    No maps found for this mode – double-check your map data.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -438,9 +409,7 @@ export function DraftSimulator({ advanced }) {
             onClick={startDraft}
             disabled={!setupReady || state.phase !== "setup"}
           >
-            {setupReady
-              ? "Start bans"
-              : "Finish steps 1–3 to start draft"}
+            {setupReady ? "Start bans" : "Finish steps 1–3 to start draft"}
           </button>
           {state.phase !== "setup" && (
             <span className="muted small">
@@ -487,13 +456,9 @@ export function DraftSimulator({ advanced }) {
                 </p>
 
                 <div className="current-pick-box">
-                  <div className="current-pick-label">
-                    {currentPickInfo.label}
-                  </div>
+                  <div className="current-pick-label">{currentPickInfo.label}</div>
                   {currentPickInfo.side && (
-                    <div className="current-pick-side">
-                      {currentPickInfo.side}
-                    </div>
+                    <div className="current-pick-side">{currentPickInfo.side}</div>
                   )}
                   <button
                     className="primary-button confirm-button"
@@ -507,9 +472,7 @@ export function DraftSimulator({ advanced }) {
                 <div className="team-columns">
                   <div className="team-column">
                     <h3>Your side</h3>
-                    <p className="muted">
-                      Track your bans and picks as you go.
-                    </p>
+                    <p className="muted">Track your bans and picks as you go.</p>
                     <div className="side-tag">
                       {state.firstPick === null
                         ? "Side not set"
@@ -521,9 +484,7 @@ export function DraftSimulator({ advanced }) {
                     <h4>Bans</h4>
                     <div className="chip-row">
                       {state.bans.length === 0 && (
-                        <span className="muted small">
-                          No bans locked yet.
-                        </span>
+                        <span className="muted small">No bans locked yet.</span>
                       )}
                       {state.bans.map((id) => {
                         const b = BRAWLERS.find((x) => x.id === id);
@@ -580,9 +541,7 @@ export function DraftSimulator({ advanced }) {
                     <h4>Enemy picks</h4>
                     <div className="chip-row">
                       {state.enemyPicks.length === 0 && (
-                        <span className="muted small">
-                          No enemy picks yet.
-                        </span>
+                        <span className="muted small">No enemy picks yet.</span>
                       )}
                       {state.enemyPicks.map((id) => {
                         const b = BRAWLERS.find((x) => x.id === id);
@@ -618,10 +577,7 @@ export function DraftSimulator({ advanced }) {
                     type="text"
                     value={state.search}
                     onChange={(e) =>
-                      setState((prev) => ({
-                        ...prev,
-                        search: e.target.value,
-                      }))
+                      setState((prev) => ({ ...prev, search: e.target.value }))
                     }
                     placeholder="Search brawler name…"
                     className="search-input"
@@ -673,7 +629,7 @@ export function DraftSimulator({ advanced }) {
                         ? "No brawlers available (check bans / picks)."
                         : state.phase === "picks" && currentPickInfo.pickingIsUs
                         ? "No recommended picks – try searching by name."
-                        : "Enemy pick – input their choice in the chips on the left, then suggestions will resume on your turn."}
+                        : "Enemy pick – input their choice on the left, then suggestions will resume on your turn."}
                     </div>
                   )}
                 </div>
@@ -681,28 +637,26 @@ export function DraftSimulator({ advanced }) {
                 <div className="recommendations-panel">
                   <h3>Recommended picks</h3>
                   <p className="muted">
-                    Suggestions using Worlds-style data, map mode, bans and
-                    comp shape.
+                    Suggestions using Worlds-style data, map mode, bans and comp
+                    shape.
                   </p>
 
                   {state.phase === "bans" && (
                     <p className="muted small">
-                      Lock all six bans first — suggestions start once picks
-                      begin.
+                      Lock all six bans first — suggestions start once picks begin.
                     </p>
                   )}
 
                   {state.phase === "picks" && !isOurTurn && (
                     <p className="muted small">
-                      Waiting for enemy pick. Mirror their choice in the Enemy
-                      side column; we’ll refresh suggestions on your turn.
+                      Waiting for enemy pick. Mirror their choice in the Enemy side
+                      column; we’ll refresh suggestions on your turn.
                     </p>
                   )}
 
                   {isOurTurn && recommendations.length === 0 && (
                     <p className="muted small">
-                      No clear read yet. Try adding more picks or adjusting the
-                      bans.
+                      No clear read yet. Try adding more picks or adjusting the bans.
                     </p>
                   )}
 
@@ -738,10 +692,7 @@ export function DraftSimulator({ advanced }) {
                                 </div>
                                 <div className="tag-row">
                                   {r.tags.map((t) => (
-                                    <span
-                                      key={t}
-                                      className="badge badge-tag"
-                                    >
+                                    <span key={t} className="badge badge-tag">
                                       {t}
                                     </span>
                                   ))}
@@ -788,7 +739,7 @@ export function DraftSimulator({ advanced }) {
               </div>
             </div>
 
-            {/* Final overview – VS screen style */}
+            {/* Final overview */}
             {state.phase === "done" && (
               <div className="final-overview">
                 <h3 className="final-title">Draft overview</h3>
@@ -803,9 +754,7 @@ export function DraftSimulator({ advanced }) {
                     <div className="vs-team-row">
                       {ourTeam.map((b) => (
                         <div key={b.id} className="vs-slot">
-                          {b.image && (
-                            <img src={b.image} alt={b.name} />
-                          )}
+                          {b.image && <img src={b.image} alt={b.name} />}
                           <div className="vs-slot-name">{b.name}</div>
                         </div>
                       ))}
@@ -817,9 +766,7 @@ export function DraftSimulator({ advanced }) {
                     <div className="vs-team-row">
                       {enemyTeam.map((b) => (
                         <div key={b.id} className="vs-slot">
-                          {b.image && (
-                            <img src={b.image} alt={b.name} />
-                          )}
+                          {b.image && <img src={b.image} alt={b.name} />}
                           <div className="vs-slot-name">{b.name}</div>
                         </div>
                       ))}
@@ -833,8 +780,8 @@ export function DraftSimulator({ advanced }) {
                       Estimated win chance: {winChance}%
                     </div>
                     <div className="muted small">
-                      Based on bans, side and basic comp shape – not a
-                      guarantee, just a quick read.
+                      Based on bans, side and basic comp shape – not a guarantee,
+                      just a quick read.
                     </div>
                   </div>
                 )}
