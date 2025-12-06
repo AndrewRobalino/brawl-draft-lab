@@ -776,3 +776,94 @@ button {
     flex-direction: column;
   }
 }
+/* ---------- App shell + top header ---------- */
+
+.app-shell {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-header {
+  border-bottom: 1px solid var(--border);
+  background: radial-gradient(
+    circle at top left,
+    rgba(0, 224, 255, 0.12),
+    transparent 60%
+  );
+}
+
+.app-header-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0.9rem 1rem 0.7rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.app-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.app-logo {
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--text-strong);
+}
+
+.app-subline {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* Nav chips */
+
+.app-nav {
+  display: inline-flex;
+  padding: 0.15rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.nav-chip {
+  border-radius: 999px;
+  padding: 0.25rem 0.9rem;
+  font-size: 0.8rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.nav-chip-active {
+  background: var(--accent);
+  color: #000;
+}
+
+/* Advanced explanations toggle */
+
+.advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.advanced-toggle input {
+  accent-color: var(--accent);
+}
