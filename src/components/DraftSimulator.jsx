@@ -123,6 +123,26 @@ export function DraftSimulator({ advanced }) {
     state.bans,
     advanced,
   ]);
+  // Assign visual tiers to recommendations:
+  // - mustPick => rainbow MUST PICK
+  // - first non-must => META (gold)
+  // - next 1–2 => STRONG (cyan)
+  // - rest => FLEX (purple)
+  const recommendationTiers = useMemo(() => {
+    const map = new Map();
+    recommendations.forEach((r, index) => {
+      if (r.mustPick) {
+        map.set(r.id, "must");
+      } else if (index === 0) {
+        map.set(r.id, "meta");
+      } else if (index <= 2) {
+        map.set(r.id, "strong");
+      } else {
+        map.set(r.id, "flex");
+      }
+    });
+    return map;
+  }, [recommendations]);
 
   // Brawlers shown in the main grid:
   // - Setup: none
