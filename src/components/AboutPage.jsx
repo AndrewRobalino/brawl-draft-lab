@@ -14,9 +14,9 @@ export function AboutPage() {
         <h2>Since Brawl Stars beta (2017)</h2>
         <p>
           Brawl Draft Lab started as a shared notes project between Carter and Andrew,
-          trying to keep up with drafts from ranked, monthly events and Worlds. Instead
-          of scrolling screenshots or spreadsheets in a lobby, the idea was to pack
-          everything into one fast, mobile-friendly tool.
+          trying to keep up with drafts from ranked, monthly events and Worlds.
+          Instead of scrolling screenshots or spreadsheets in a lobby, the idea was to
+          pack everything into one fast, mobile-friendly tool.
         </p>
         <p>
           Under the hood, the site mixes Worlds-style draft data with simple role logic:
@@ -36,14 +36,14 @@ export function AboutPage() {
         {/* Carter */}
         <div className="creator-row">
           <img
+            className="creator-avatar"
             src="/assets/avatars/draco.jpg"
             alt="Carter avatar"
-            className="creator-avatar"
           />
           <div>
             <h3>Carter &quot;GOAT&quot; B.</h3>
-            <p className="muted">Sharpshooter / Lane Specialist</p>
-            <p>
+            <p className="muted small">Sharpshooter / Lane Specialist</p>
+            <p className="muted small">
               Lives in draft lobbies, spams Piper, Belle, Mandy and any other
               long-range menace. Half of the logic behind the recommendations is
               basically “what would Carter insta-lock here?”.
@@ -57,14 +57,14 @@ export function AboutPage() {
         {/* Andrew */}
         <div className="creator-row">
           <img
+            className="creator-avatar"
             src="/assets/avatars/frank.webp"
             alt="Andrew avatar"
-            className="creator-avatar"
           />
           <div>
             <h3>Andrew &quot;Squadipoo&quot; Robalino</h3>
-            <p className="muted">Mid / Tank Specialist</p>
-            <p>
+            <p className="muted small">Mid / Tank Specialist</p>
+            <p className="muted small">
               Swaps between control mids and beefy frontliners, focuses on drafting comps
               that actually feel playable in real ranked games, not just picture-perfect
               esports lobbies.
@@ -78,5 +78,3 @@ export function AboutPage() {
     </div>
   );
 }
-
-export default AboutPage;
