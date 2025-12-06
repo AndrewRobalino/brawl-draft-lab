@@ -49,8 +49,35 @@ export function AboutPage() {
               basically &ldquo;what would Carter insta-lock here?&rdquo;.
             </p>
             <p className="muted small">
-              Favorite picks: Piper · Belle · Mandy · Byron
+              Favorite picks: Piper · Angelo · Ash
             </p>
+
+            <div className="favorite-brawlers-row">
+              <div className="favorite-brawler favorite-brawler-main">
+                <img
+                  src="/assets/brawlers/piper.webp"
+                  alt="Piper"
+                  className="favorite-brawler-icon"
+                />
+                <span className="favorite-brawler-name">Piper</span>
+              </div>
+              <div className="favorite-brawler">
+                <img
+                  src="/assets/brawlers/angelo.webp"
+                  alt="Angelo"
+                  className="favorite-brawler-icon"
+                />
+                <span className="favorite-brawler-name">Angelo</span>
+              </div>
+              <div className="favorite-brawler">
+                <img
+                  src="/assets/brawlers/ash.webp"
+                  alt="Ash"
+                  className="favorite-brawler-icon"
+                />
+                <span className="favorite-brawler-name">Ash</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -70,8 +97,35 @@ export function AboutPage() {
               not just picture-perfect esports lobbies.
             </p>
             <p className="muted small">
-              Favorite picks: Max · Fang · Sam · Doug
+              Favorite picks: Gus · Crow · Jae Yong
             </p>
+
+            <div className="favorite-brawlers-row">
+              <div className="favorite-brawler favorite-brawler-main">
+                <img
+                  src="/assets/brawlers/gus.webp"
+                  alt="Gus"
+                  className="favorite-brawler-icon"
+                />
+                <span className="favorite-brawler-name">Gus</span>
+              </div>
+              <div className="favorite-brawler">
+                <img
+                  src="/assets/brawlers/crow.webp"
+                  alt="Crow"
+                  className="favorite-brawler-icon"
+                />
+                <span className="favorite-brawler-name">Crow</span>
+              </div>
+              <div className="favorite-brawler">
+                <img
+                  src="/assets/brawlers/jae_yong.webp"
+                  alt="Jae Yong"
+                  className="favorite-brawler-icon"
+                />
+                <span className="favorite-brawler-name">Jae Yong</span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
