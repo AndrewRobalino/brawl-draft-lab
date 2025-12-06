@@ -629,15 +629,19 @@ export function DraftSimulator({ advanced }) {
                   />
                 </div>
 
-                <div className="brawler-grid">
+                                <div className="brawler-grid">
                   {visibleBrawlers.map((b) => {
                     const isPending = state.pendingPick === b.id;
-                    const rec = recommendations.find((r) => r.id === b.id);
+                    const tier = recommendationTiers.get(b.id);
+
                     const classNames = [
                       "brawler-tile",
                       takenSet.has(b.id) ? "disabled" : "",
-                      rec ? "recommended" : "",
-                      rec && rec.mustPick ? "must" : "",
+                      tier ? "recommended" : "",
+                      tier === "must" ? "must" : "",
+                      tier === "meta" ? "tier-meta" : "",
+                      tier === "strong" ? "tier-strong" : "",
+                      tier === "flex" ? "tier-flex" : "",
                     ]
                       .filter(Boolean)
                       .join(" ");
@@ -649,6 +653,21 @@ export function DraftSimulator({ advanced }) {
                         onClick={() => handleBrawlerClick(b.id)}
                         disabled={takenSet.has(b.id)}
                       >
+                        {b.image && (
+                          <img
+                            src={b.image}
+                            alt={b.name}
+                            className="brawler-portrait"
+                          />
+                        )}
+                        <div className="brawler-name">{b.name}</div>
+                        {isPending && (
+                          <div className="pending-label">Pending</div>
+                        )}
+                      </button>
+                    );
+                  })}
+
                         {b.image && (
                           <img
                             src={b.image}
@@ -703,16 +722,85 @@ export function DraftSimulator({ advanced }) {
                     </p>
                   )}
 
-                  {isOurTurn && recommendations.length > 0 && (
+                                    {isOurTurn && recommendations.length > 0 && (
                     <div className="recommendation-list">
-                      {recommendations.map((r) => (
-                        <div
-                          key={r.id}
-                          className={
-                            "recommendation-card" +
-                            (r.mustPick ? " recommendation-card-must" : "")
-                          }
-                        >
+                      {recommendations.map((r) => {
+                        const tier = recommendationTiers.get(r.id);
+                        const cardClassNames = [
+                          "recommendation-card",
+                          tier === "must" ? "recommendation-card-must" : "",
+                          tier === "meta" ? "recommendation-card-meta" : "",
+                          tier === "strong"
+                            ? "recommendation-card-strong"
+                            : "",
+                          tier === "flex" ? "recommendation-card-flex" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ");
+
+                        return (
+                          <div key={r.id} className={cardClassNames}>
+                            <div className="recommendation-main">
+                              {r.image && (
+                                <img
+                                  src={r.image}
+                                  alt={r.name}
+                                  className="recommendation-image"
+                                />
+                              )}
+                              <div>
+                                <div className="recommendation-name">
+                                  {r.name}
+                                </div>
+                                <div className="tag-row">
+                                  {r.tags.map((t) => (
+                                    <span
+                                      key={t}
+                                      className="badge badge-tag"
+                                    >
+                                      {t}
+                                    </span>
+                                  ))}
+                                  {tier === "must" && (
+                                    <span className="badge badge-must">
+                                      MUST PICK
+                                    </span>
+                                  )}
+                                  {tier === "meta" && (
+                                    <span className="badge badge-meta">
+                                      META
+                                    </span>
+                                  )}
+                                  {tier === "strong" && (
+                                    <span className="badge badge-strong">
+                                      STRONG
+                                    </span>
+                                  )}
+                                  {tier === "flex" && (
+                                    <span className="badge badge-flex">
+                                      FLEX
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              className="secondary-button"
+                              onClick={() => handleUseRecommendation(r.id)}
+                            >
+                              Use this pick
+                            </button>
+                            <p className="muted small">
+                              {advanced
+                                ? r.longExplanation
+                                : r.shortExplanation}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                           <div className="recommendation-main">
                             {r.image && (
                               <img
