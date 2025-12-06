@@ -47,7 +47,7 @@ export function DraftSimulator({ advanced }) {
     [state.bans, state.ourPicks, state.enemyPicks]
   );
 
-  // Step gating: you must choose side -> then mode -> then map
+  // Step gating
   const setupReady =
     state.firstPick !== null && !!state.mode && !!state.mapId;
 
@@ -97,10 +97,7 @@ export function DraftSimulator({ advanced }) {
   const isOurTurn =
     state.phase === "picks" && !!currentMap && currentPickInfo.pickingIsUs;
 
-  // Recommendations only when:
-  // - we’re past bans
-  // - it’s *our* turn to pick
-  // - we have a map selected
+  // Recommendations (logic from your version)
   const recommendations = useMemo(() => {
     if (!isOurTurn || !currentMap) return [];
     try {
@@ -123,11 +120,8 @@ export function DraftSimulator({ advanced }) {
     state.bans,
     advanced,
   ]);
-  // Assign visual tiers to recommendations:
-  // - mustPick => rainbow MUST PICK
-  // - first non-must => META (gold)
-  // - next 1–2 => STRONG (cyan)
-  // - rest => FLEX (purple)
+
+  // Tier map: must/meta/strong/flex
   const recommendationTiers = useMemo(() => {
     const map = new Map();
     recommendations.forEach((r, index) => {
@@ -144,18 +138,14 @@ export function DraftSimulator({ advanced }) {
     return map;
   }, [recommendations]);
 
-  // Brawlers shown in the main grid:
-  // - Setup: none
-  // - Bans: full list (minus taken), with search
-  // - Picks (our turn): recommendations only (unless searching)
-  // - Picks (enemy turn): empty grid (you manually mirror enemy in chips)
+  // Visible brawlers in grid
   const visibleBrawlers = useMemo(() => {
     if (!setupReady || state.phase === "setup") return [];
 
     const q = state.search.trim().toLowerCase();
     const available = BRAWLERS.filter((b) => !takenSet.has(b.id));
 
-    // If user is typing, always show search results
+    // If typing, show search results
     if (q) {
       return available.filter(
         (b) =>
@@ -201,7 +191,7 @@ export function DraftSimulator({ advanced }) {
     [state.enemyPicks]
   );
 
-  // Very light-weight "win chance" – just gives a 35–65% band
+  // Simple win chance band
   const winChance = useMemo(() => {
     if (state.phase !== "done" || !currentMap) return null;
     const banFactor = state.bans.length / TOTAL_BANS; // 0–1
@@ -435,12 +425,10 @@ export function DraftSimulator({ advanced }) {
           <button
             className="primary-button"
             onClick={startDraft}
-            disabled={!setupReady || state.phase !== "bans" && state.phase !== "setup"}
+            disabled={!setupReady || state.phase !== "setup"}
           >
             {setupReady
-              ? state.phase === "setup"
-                ? "Start bans"
-                : "Bans in progress"
+              ? "Start bans"
               : "Finish steps 1–3 to start draft"}
           </button>
           {state.phase !== "setup" && (
@@ -629,7 +617,7 @@ export function DraftSimulator({ advanced }) {
                   />
                 </div>
 
-                                <div className="brawler-grid">
+                <div className="brawler-grid">
                   {visibleBrawlers.map((b) => {
                     const isPending = state.pendingPick === b.id;
                     const tier = recommendationTiers.get(b.id);
@@ -653,21 +641,6 @@ export function DraftSimulator({ advanced }) {
                         onClick={() => handleBrawlerClick(b.id)}
                         disabled={takenSet.has(b.id)}
                       >
-                        {b.image && (
-                          <img
-                            src={b.image}
-                            alt={b.name}
-                            className="brawler-portrait"
-                          />
-                        )}
-                        <div className="brawler-name">{b.name}</div>
-                        {isPending && (
-                          <div className="pending-label">Pending</div>
-                        )}
-                      </button>
-                    );
-                  })}
-
                         {b.image && (
                           <img
                             src={b.image}
@@ -722,7 +695,7 @@ export function DraftSimulator({ advanced }) {
                     </p>
                   )}
 
-                                    {isOurTurn && recommendations.length > 0 && (
+                  {isOurTurn && recommendations.length > 0 && (
                     <div className="recommendation-list">
                       {recommendations.map((r) => {
                         const tier = recommendationTiers.get(r.id);
@@ -798,46 +771,6 @@ export function DraftSimulator({ advanced }) {
                           </div>
                         );
                       })}
-                    </div>
-                  )}
-
-                          <div className="recommendation-main">
-                            {r.image && (
-                              <img
-                                src={r.image}
-                                alt={r.name}
-                                className="recommendation-image"
-                              />
-                            )}
-                            <div>
-                              <div className="recommendation-name">
-                                {r.name}
-                              </div>
-                              <div className="tag-row">
-                                {r.tags.map((t) => (
-                                  <span key={t} className="badge badge-tag">
-                                    {t}
-                                  </span>
-                                ))}
-                                {r.mustPick && (
-                                  <span className="badge badge-must">
-                                    MUST PICK
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            className="secondary-button"
-                            onClick={() => handleUseRecommendation(r.id)}
-                          >
-                            Use this pick
-                          </button>
-                          <p className="muted small">
-                            {advanced ? r.longExplanation : r.shortExplanation}
-                          </p>
-                        </div>
-                      ))}
                     </div>
                   )}
                 </div>
