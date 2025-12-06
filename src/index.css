@@ -641,3 +641,50 @@ button {
     height: 60px;
   }
 }
+/* ---------- Recommendation tiers (meta / strong / flex) ---------- */
+
+/* Brawler tiles */
+.brawler-tile.tier-meta:not(.must) {
+  border-color: rgba(255, 215, 64, 0.95); /* gold */
+  box-shadow: 0 0 20px rgba(255, 215, 64, 0.45);
+}
+
+.brawler-tile.tier-strong:not(.must) {
+  border-color: rgba(0, 229, 255, 0.9); /* cyan */
+  box-shadow: 0 0 18px rgba(0, 229, 255, 0.45);
+}
+
+.brawler-tile.tier-flex:not(.must) {
+  border-color: rgba(179, 136, 255, 0.9); /* purple */
+  box-shadow: 0 0 16px rgba(179, 136, 255, 0.35);
+}
+
+/* Recommendation cards */
+.recommendation-card-meta {
+  border-color: rgba(255, 215, 64, 0.9);
+  box-shadow: 0 0 18px rgba(255, 215, 64, 0.35);
+}
+
+.recommendation-card-strong {
+  border-color: rgba(0, 229, 255, 0.9);
+  box-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
+}
+
+.recommendation-card-flex {
+  border-color: rgba(179, 136, 255, 0.9);
+}
+
+/* Tier badges */
+.badge-meta {
+  background: linear-gradient(135deg, #ffd54a, #ffb300);
+  color: #1b1300;
+}
+
+.badge-strong {
+  background: linear-gradient(135deg, #00e5ff, #00b8d4);
+  color: #001318;
+}
+
+.badge-flex {
+  background: linear-gradient(135deg, #b388ff, #7c4dff);
+}
