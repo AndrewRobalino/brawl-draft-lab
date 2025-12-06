@@ -4,6 +4,9 @@ import { BRAWLERS } from "../data/brawlers";
 import { getRecommendations } from "../logic/recommendationEngine";
 
 const MODES = ["Gem Grab", "Brawl Ball", "Bounty", "Heist", "Hot Zone", "Knockout"];
+const TOTAL_BANS = 6;
+// Worlds-style ABBAAB pattern
+const PICK_PATTERN = ["A", "B", "B", "A", "A", "B"];
 
 function groupMapsByMode() {
   const byMode = {};
@@ -16,16 +19,12 @@ function groupMapsByMode() {
 }
 
 const MAPS_BY_MODE = groupMapsByMode();
-const TOTAL_BANS = 6;
 
 function getInitialState() {
-  const defaultMode = "Gem Grab";
-  const firstMap = (MAPS_BY_MODE[defaultMode] || [])[0];
-
   return {
-    mode: defaultMode,
-    mapId: firstMap ? firstMap.id : null,
-    firstPick: null, // user must choose first or last pick
+    mode: null,
+    mapId: null,
+    firstPick: null, // true = we are A (first), false = we are B (last)
     bans: [],
     ourPicks: [],
     enemyPicks: [],
@@ -48,6 +47,7 @@ export function DraftSimulator({ advanced }) {
     [state.bans, state.ourPicks, state.enemyPicks]
   );
 
+  // Step gating: you must choose side -> then mode -> then map
   const setupReady =
     state.firstPick !== null && !!state.mode && !!state.mapId;
 
@@ -65,7 +65,7 @@ export function DraftSimulator({ advanced }) {
       return {
         label: `Ban ${num} / ${TOTAL_BANS}`,
         side: num % 2 === 1 ? "Your ban" : "Enemy ban",
-        pickingIsUs: true, // bans are always “ours” to input
+        pickingIsUs: true, // we input both sides' bans
       };
     }
 
@@ -77,11 +77,9 @@ export function DraftSimulator({ advanced }) {
       return { label: "Draft complete", side: null, pickingIsUs: false };
     }
 
-    // Worlds-style ABBAAB pattern
-    const pattern = ["A", "B", "B", "A", "A", "B"];
-    const turn = pattern[total];
-    const ourSide = state.firstPick ? "A" : "B";
-    const pickingIsUs = turn === ourSide;
+    const turnLetter = PICK_PATTERN[total];
+    const ourSideLetter = state.firstPick ? "A" : "B";
+    const pickingIsUs = turnLetter === ourSideLetter;
 
     return {
       label: `Pick ${total + 1} / 6`,
@@ -127,15 +125,17 @@ export function DraftSimulator({ advanced }) {
   ]);
 
   // Brawlers shown in the main grid:
-  // - If search is typed: any matching brawler (not taken)
-  // - Else if it’s our turn & we have recommendations: only those recommended
-  // - Else (enemy turn / bans): show nothing in the grid
+  // - Setup: none
+  // - Bans: full list (minus taken), with search
+  // - Picks (our turn): recommendations only (unless searching)
+  // - Picks (enemy turn): empty grid (you manually mirror enemy in chips)
   const visibleBrawlers = useMemo(() => {
     if (!setupReady || state.phase === "setup") return [];
 
     const q = state.search.trim().toLowerCase();
     const available = BRAWLERS.filter((b) => !takenSet.has(b.id));
 
+    // If user is typing, always show search results
     if (q) {
       return available.filter(
         (b) =>
@@ -144,45 +144,94 @@ export function DraftSimulator({ advanced }) {
       );
     }
 
-    if (isOurTurn && recommendations.length > 0) {
+    if (state.phase === "bans") {
+      return available;
+    }
+
+    if (state.phase === "picks" && isOurTurn && recommendations.length > 0) {
       const recIds = new Set(recommendations.map((r) => r.id));
       return available.filter((b) => recIds.has(b.id));
     }
 
-    // During bans or enemy picks: grid stays minimal
-    if (state.phase === "bans") return available; // bans still need full list
+    // Enemy pick / nothing to suggest
     return [];
-  }, [setupReady, state.phase, state.search, takenSet, isOurTurn, recommendations]);
+  }, [
+    setupReady,
+    state.phase,
+    state.search,
+    takenSet,
+    isOurTurn,
+    recommendations,
+  ]);
+
+  // Teams for final overview
+  const ourTeam = useMemo(
+    () =>
+      state.ourPicks
+        .map((id) => BRAWLERS.find((b) => b.id === id))
+        .filter(Boolean),
+    [state.ourPicks]
+  );
+
+  const enemyTeam = useMemo(
+    () =>
+      state.enemyPicks
+        .map((id) => BRAWLERS.find((b) => b.id === id))
+        .filter(Boolean),
+    [state.enemyPicks]
+  );
+
+  // Very light-weight "win chance" – just gives a 35–65% band
+  const winChance = useMemo(() => {
+    if (state.phase !== "done" || !currentMap) return null;
+    const banFactor = state.bans.length / TOTAL_BANS; // 0–1
+    const sideBonus = state.firstPick ? 2 : 0;
+    const raw = 48 + banFactor * 8 + sideBonus; // ~48–58
+    const clamped = Math.max(35, Math.min(65, Math.round(raw)));
+    return clamped;
+  }, [state.phase, currentMap, state.bans.length, state.firstPick]);
+
+  const bansRemaining = TOTAL_BANS - state.bans.length;
+
+  // ----------------- handlers -----------------
 
   function resetDraft() {
     setState(getInitialState());
   }
 
+  function handleFirstPickToggle(value) {
+    setState((prev) =>
+      prev.phase !== "setup"
+        ? prev
+        : { ...prev, firstPick: value }
+    );
+  }
+
   function handleModeChange(mode) {
-    const maps = MAPS_BY_MODE[mode] || [];
-    setState((prev) => ({
-      ...getInitialState(),
-      mode,
-      mapId: maps[0] ? maps[0].id : null,
-      firstPick: prev.firstPick, // keep side selection
-    }));
+    setState((prev) => {
+      if (prev.phase !== "setup") return prev;
+      const maps = MAPS_BY_MODE[mode] || [];
+      return {
+        ...prev,
+        mode,
+        mapId: maps[0] ? maps[0].id : null,
+      };
+    });
   }
 
   function handleMapSelect(id) {
-    setState((prev) => ({ ...prev, mapId: id }));
-  }
-
-  function handleFirstPickToggle(value) {
-    setState((prev) => ({ ...prev, firstPick: value }));
+    setState((prev) =>
+      prev.phase !== "setup" ? prev : { ...prev, mapId: id }
+    );
   }
 
   function startDraft() {
     if (!setupReady) return;
-    setState((prev) => ({
-      ...prev,
-      phase: "bans",
-      pendingPick: null,
-    }));
+    setState((prev) =>
+      prev.phase !== "setup"
+        ? prev
+        : { ...prev, phase: "bans", pendingPick: null }
+    );
   }
 
   function handleBrawlerClick(id) {
@@ -215,10 +264,9 @@ export function DraftSimulator({ advanced }) {
         return { ...prev, pendingPick: null, phase: "done" };
       }
 
-      const pattern = ["A", "B", "B", "A", "A", "B"];
-      const turn = pattern[total];
-      const ourSide = prev.firstPick ? "A" : "B";
-      const pickingIsUs = turn === ourSide;
+      const turnLetter = PICK_PATTERN[total];
+      const ourSideLetter = prev.firstPick ? "A" : "B";
+      const pickingIsUs = turnLetter === ourSideLetter;
 
       if (pickingIsUs) {
         our.push(id);
@@ -244,7 +292,7 @@ export function DraftSimulator({ advanced }) {
     setState((prev) => ({ ...prev, pendingPick: id }));
   }
 
-  const bansRemaining = TOTAL_BANS - state.bans.length;
+  // ----------------- render -----------------
 
   return (
     <div className="page">
@@ -258,15 +306,16 @@ export function DraftSimulator({ advanced }) {
         </button>
       </div>
 
-      {/* SETUP */}
+      {/* SETUP – side -> mode -> map */}
       <section className="section-card">
         <h2>Draft setup</h2>
         <p className="muted">
           Follow the real draft order: pick side, mode &amp; map, then lock bans and
-          picks in order.
+          picks in order. Each step unlocks the next.
         </p>
 
         <div className="draft-setup-grid">
+          {/* Step 1 – side */}
           <div>
             <h3>Side</h3>
             <p className="muted">
@@ -296,55 +345,69 @@ export function DraftSimulator({ advanced }) {
             </div>
           </div>
 
+          {/* Step 2 – mode */}
           <div>
             <h3>Game mode</h3>
             <p className="muted">Step 2 – select the mode you’re playing.</p>
-            <div className="mode-chips">
-              {MODES.map((mode) => (
-                <button
-                  key={mode}
-                  className={
-                    state.mode === mode
-                      ? "chip chip-primary"
-                      : "chip chip-ghost"
-                  }
-                  onClick={() => handleModeChange(mode)}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
+            {state.firstPick === null ? (
+              <p className="muted small">
+                Choose First pick or Last pick in Step 1 to unlock game modes.
+              </p>
+            ) : (
+              <div className="mode-chips">
+                {MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    className={
+                      state.mode === mode
+                        ? "chip chip-primary"
+                        : "chip chip-ghost"
+                    }
+                    onClick={() => handleModeChange(mode)}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
+          {/* Step 3 – map */}
           <div>
             <h3>Map</h3>
             <p className="muted">
               Step 3 – choose the exact map from the current pool.
             </p>
-            <div className="map-grid">
-              {(MAPS_BY_MODE[state.mode] || []).map((m) => (
-                <button
-                  key={m.id}
-                  className={
-                    state.mapId === m.id
-                      ? "map-tile map-tile-selected"
-                      : "map-tile"
-                  }
-                  onClick={() => handleMapSelect(m.id)}
-                >
-                  {m.image && (
-                    <div
-                      className="map-image"
-                      style={{ backgroundImage: `url(${m.image})` }}
-                    />
-                  )}
-                  <div className="map-label">
-                    <div className="map-name">{m.name}</div>
-                    <div className="map-mode">{m.mode}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
+            {!state.mode ? (
+              <p className="muted small">
+                Select a game mode in Step 2 to unlock the map pool.
+              </p>
+            ) : (
+              <div className="map-grid">
+                {(MAPS_BY_MODE[state.mode] || []).map((m) => (
+                  <button
+                    key={m.id}
+                    className={
+                      state.mapId === m.id
+                        ? "map-tile map-tile-selected"
+                        : "map-tile"
+                    }
+                    onClick={() => handleMapSelect(m.id)}
+                  >
+                    {m.image && (
+                      <div
+                        className="map-image"
+                        style={{ backgroundImage: `url(${m.image})` }}
+                      />
+                    )}
+                    <div className="map-label">
+                      <div className="map-name">{m.name}</div>
+                      <div className="map-mode">{m.mode}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -352,11 +415,13 @@ export function DraftSimulator({ advanced }) {
           <button
             className="primary-button"
             onClick={startDraft}
-            disabled={!setupReady || state.phase !== "setup"}
+            disabled={!setupReady || state.phase !== "bans" && state.phase !== "setup"}
           >
             {setupReady
-              ? "Start bans"
-              : "Pick side + map to start draft"}
+              ? state.phase === "setup"
+                ? "Start bans"
+                : "Bans in progress"
+              : "Finish steps 1–3 to start draft"}
           </button>
           {state.phase !== "setup" && (
             <span className="muted small">
@@ -368,186 +433,182 @@ export function DraftSimulator({ advanced }) {
 
       {/* LIVE DRAFT */}
       <section className="section-card draft-section">
-        <div className="draft-layout">
-          {/* Left column – status & history */}
-          <div className="draft-status-column">
-            <div className="draft-phase-header">
-              <span className={`phase-badge phase-${state.phase}`}>
-                {state.phase === "setup"
-                  ? "Setup"
-                  : state.phase === "bans"
-                  ? "Bans"
-                  : state.phase === "picks"
-                  ? "Picks"
-                  : "Done"}
-              </span>
-              <h2>Live draft</h2>
-            </div>
-
-            <p className="muted">
-              {state.phase === "setup" &&
-                "Lock your side, mode and map, then start bans to begin the draft."}
-              {state.phase === "bans" &&
-                `${bansRemaining} ban${
-                  bansRemaining === 1 ? "" : "s"
-                } left. Click a brawler then Confirm to lock each ban.`}
-              {state.phase === "picks" &&
-                (currentPickInfo.pickingIsUs
-                  ? "It’s your pick. Choose a brawler below, then Confirm."
-                  : "Enemy pick – mirror their choice so suggestions stay accurate.")}
-              {state.phase === "done" &&
-                "Draft is finished. You can review the teams or reset to run it back."}
-            </p>
-
-            <div className="current-pick-box">
-              <div className="current-pick-label">
-                {currentPickInfo.label}
-              </div>
-              {currentPickInfo.side && (
-                <div className="current-pick-side">
-                  {currentPickInfo.side}
+        {state.phase === "setup" ? (
+          <p className="muted">
+            Complete setup above and press <strong>Start bans</strong> to unlock the
+            live draft tools, recommendations and final overview.
+          </p>
+        ) : (
+          <>
+            <div className="draft-layout">
+              {/* Left column – status & history */}
+              <div className="draft-status-column">
+                <div className="draft-phase-header">
+                  <span className={`phase-badge phase-${state.phase}`}>
+                    {state.phase === "bans"
+                      ? "Bans"
+                      : state.phase === "picks"
+                      ? "Picks"
+                      : "Done"}
+                  </span>
+                  <h2>Live draft</h2>
                 </div>
-              )}
-              <button
-                className="primary-button confirm-button"
-                onClick={confirmPending}
-                disabled={!state.pendingPick || state.phase === "setup"}
-              >
-                Confirm
-              </button>
-            </div>
 
-            <div className="team-columns">
-              <div className="team-column">
-                <h3>Your side</h3>
                 <p className="muted">
-                  Track your bans and picks as you go.
-                </p>
-                <div className="side-tag">
-                  {state.firstPick === null
-                    ? "Side not set"
-                    : state.firstPick
-                    ? "First pick"
-                    : "Last pick"}
-                </div>
-
-                <h4>Bans</h4>
-                <div className="chip-row">
-                  {state.bans.length === 0 && (
-                    <span className="muted small">
-                      No bans locked yet.
-                    </span>
-                  )}
-                  {state.bans.map((id) => {
-                    const b = BRAWLERS.find((x) => x.id === id);
-                    return (
-                      <div key={id} className="brawler-chip">
-                        {b?.image && (
-                          <img
-                            src={b.image}
-                            alt={b?.name || id}
-                            className="brawler-chip-image"
-                          />
-                        )}
-                        <span className="brawler-chip-name">
-                          {b?.name || id}
-                        </span>
-                        <span className="badge badge-ban">Ban</span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <h4>Your picks</h4>
-                <div className="chip-row">
-                  {state.ourPicks.length === 0 && (
-                    <span className="muted small">
-                      No picks yet.
-                    </span>
-                  )}
-                  {state.ourPicks.map((id) => {
-                    const b = BRAWLERS.find((x) => x.id === id);
-                    return (
-                      <div key={id} className="brawler-chip">
-                        {b?.image && (
-                          <img
-                            src={b.image}
-                            alt={b?.name || id}
-                            className="brawler-chip-image"
-                          />
-                        )}
-                        <span className="brawler-chip-name">
-                          {b?.name || id}
-                        </span>
-                        <span className="badge badge-you">You</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="team-column">
-                <h3>Enemy side</h3>
-                <p className="muted">
-                  Mirror their picks so suggestions stay accurate.
+                  {state.phase === "bans" &&
+                    `${bansRemaining} ban${
+                      bansRemaining === 1 ? "" : "s"
+                    } left. Click a brawler then Confirm to lock each ban.`}
+                  {state.phase === "picks" &&
+                    (currentPickInfo.pickingIsUs
+                      ? "It’s your pick. Choose a brawler below, then Confirm."
+                      : "Enemy pick – mirror their choice so suggestions stay accurate.")}
+                  {state.phase === "done" &&
+                    "Draft is finished. Review the VS screen below, then get ready for the match."}
                 </p>
 
-                <h4>Enemy picks</h4>
-                <div className="chip-row">
-                  {state.enemyPicks.length === 0 && (
-                    <span className="muted small">
-                      No enemy picks yet.
-                    </span>
+                <div className="current-pick-box">
+                  <div className="current-pick-label">
+                    {currentPickInfo.label}
+                  </div>
+                  {currentPickInfo.side && (
+                    <div className="current-pick-side">
+                      {currentPickInfo.side}
+                    </div>
                   )}
-                  {state.enemyPicks.map((id) => {
-                    const b = BRAWLERS.find((x) => x.id === id);
-                    return (
-                      <div key={id} className="brawler-chip">
-                        {b?.image && (
-                          <img
-                            src={b.image}
-                            alt={b?.name || id}
-                            className="brawler-chip-image"
-                          />
-                        )}
-                        <span className="brawler-chip-name">
-                          {b?.name || id}
+                  <button
+                    className="primary-button confirm-button"
+                    onClick={confirmPending}
+                    disabled={!state.pendingPick}
+                  >
+                    Confirm
+                  </button>
+                </div>
+
+                <div className="team-columns">
+                  <div className="team-column">
+                    <h3>Your side</h3>
+                    <p className="muted">
+                      Track your bans and picks as you go.
+                    </p>
+                    <div className="side-tag">
+                      {state.firstPick === null
+                        ? "Side not set"
+                        : state.firstPick
+                        ? "First pick"
+                        : "Last pick"}
+                    </div>
+
+                    <h4>Bans</h4>
+                    <div className="chip-row">
+                      {state.bans.length === 0 && (
+                        <span className="muted small">
+                          No bans locked yet.
                         </span>
-                        <span className="badge badge-enemy">Enemy</span>
-                      </div>
-                    );
-                  })}
+                      )}
+                      {state.bans.map((id) => {
+                        const b = BRAWLERS.find((x) => x.id === id);
+                        return (
+                          <div key={id} className="brawler-chip">
+                            {b?.image && (
+                              <img
+                                src={b.image}
+                                alt={b?.name || id}
+                                className="brawler-chip-image"
+                              />
+                            )}
+                            <span className="brawler-chip-name">
+                              {b?.name || id}
+                            </span>
+                            <span className="badge badge-ban">Ban</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <h4>Your picks</h4>
+                    <div className="chip-row">
+                      {state.ourPicks.length === 0 && (
+                        <span className="muted small">No picks yet.</span>
+                      )}
+                      {state.ourPicks.map((id) => {
+                        const b = BRAWLERS.find((x) => x.id === id);
+                        return (
+                          <div key={id} className="brawler-chip">
+                            {b?.image && (
+                              <img
+                                src={b.image}
+                                alt={b?.name || id}
+                                className="brawler-chip-image"
+                              />
+                            )}
+                            <span className="brawler-chip-name">
+                              {b?.name || id}
+                            </span>
+                            <span className="badge badge-you">You</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="team-column">
+                    <h3>Enemy side</h3>
+                    <p className="muted">
+                      Mirror their picks so suggestions stay accurate.
+                    </p>
+
+                    <h4>Enemy picks</h4>
+                    <div className="chip-row">
+                      {state.enemyPicks.length === 0 && (
+                        <span className="muted small">
+                          No enemy picks yet.
+                        </span>
+                      )}
+                      {state.enemyPicks.map((id) => {
+                        const b = BRAWLERS.find((x) => x.id === id);
+                        return (
+                          <div key={id} className="brawler-chip">
+                            {b?.image && (
+                              <img
+                                src={b.image}
+                                alt={b?.name || id}
+                                className="brawler-chip-image"
+                              />
+                            )}
+                            <span className="brawler-chip-name">
+                              {b?.name || id}
+                            </span>
+                            <span className="badge badge-enemy">Enemy</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Right column – search + recommendations */}
-          <div className="draft-action-column">
-            <div className="search-header">
-              <h3>Brawler search</h3>
-              <p className="muted">
-                Type to filter, or tap a recommended pick when it’s your turn.
-              </p>
-              <input
-                type="text"
-                value={state.search}
-                onChange={(e) =>
-                  setState((prev) => ({ ...prev, search: e.target.value }))
-                }
-                placeholder="Search brawler name…"
-                className="search-input"
-              />
-            </div>
+              {/* Right column – search + recommendations */}
+              <div className="draft-action-column">
+                <div className="search-header">
+                  <h3>Brawler search</h3>
+                  <p className="muted">
+                    Type to filter, or tap a recommended pick when it’s your turn.
+                  </p>
+                  <input
+                    type="text"
+                    value={state.search}
+                    onChange={(e) =>
+                      setState((prev) => ({
+                        ...prev,
+                        search: e.target.value,
+                      }))
+                    }
+                    placeholder="Search brawler name…"
+                    className="search-input"
+                  />
+                </div>
 
-            {state.phase === "setup" && (
-              <div className="muted">
-                Complete setup and start bans to unlock the draft tools.
-              </div>
-            )}
-
-            {state.phase !== "setup" && (
-              <>
                 <div className="brawler-grid">
                   {visibleBrawlers.map((b) => {
                     const isPending = state.pendingPick === b.id;
@@ -587,9 +648,9 @@ export function DraftSimulator({ advanced }) {
                     <div className="muted small">
                       {state.phase === "bans"
                         ? "No brawlers available (check bans / picks)."
-                        : currentPickInfo.pickingIsUs
+                        : state.phase === "picks" && currentPickInfo.pickingIsUs
                         ? "No recommended picks – try searching by name."
-                        : "Enemy pick – input their choice, then suggestions will resume on your turn."}
+                        : "Enemy pick – input their choice in the chips on the left, then suggestions will resume on your turn."}
                     </div>
                   )}
                 </div>
@@ -608,13 +669,12 @@ export function DraftSimulator({ advanced }) {
                     </p>
                   )}
 
-                  {state.phase === "picks" &&
-                    !isOurTurn && (
-                      <p className="muted small">
-                        Waiting for enemy pick. Mirror their choice above, then
-                        we’ll refresh suggestions on your turn.
-                      </p>
-                    )}
+                  {state.phase === "picks" && !isOurTurn && (
+                    <p className="muted small">
+                      Waiting for enemy pick. Mirror their choice in the Enemy
+                      side column; we’ll refresh suggestions on your turn.
+                    </p>
+                  )}
 
                   {isOurTurn && recommendations.length === 0 && (
                     <p className="muted small">
@@ -673,12 +733,63 @@ export function DraftSimulator({ advanced }) {
                     </div>
                   )}
                 </div>
-              </>
-            )}
-          </div>
-        </div>
+              </div>
+            </div>
 
-        {/* TODO: final overview style – we’ll build the full VS screen next pass */}
+            {/* Final overview – VS screen style */}
+            {state.phase === "done" && (
+              <div className="final-overview">
+                <h3 className="final-title">Draft overview</h3>
+                <p className="muted small">
+                  Snapshot of the finished draft – use this as a quick mental
+                  warmup before the game loads.
+                </p>
+
+                <div className="vs-layout">
+                  <div className="vs-side vs-side-our">
+                    <div className="vs-label">Your team</div>
+                    <div className="vs-team-row">
+                      {ourTeam.map((b) => (
+                        <div key={b.id} className="vs-slot">
+                          {b.image && (
+                            <img src={b.image} alt={b.name} />
+                          )}
+                          <div className="vs-slot-name">{b.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="vs-side vs-side-enemy">
+                    <div className="vs-label">Enemy team</div>
+                    <div className="vs-team-row">
+                      {enemyTeam.map((b) => (
+                        <div key={b.id} className="vs-slot">
+                          {b.image && (
+                            <img src={b.image} alt={b.name} />
+                          )}
+                          <div className="vs-slot-name">{b.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {winChance !== null && (
+                  <div className="vs-center">
+                    <div className="win-chance">
+                      Estimated win chance: {winChance}%
+                    </div>
+                    <div className="muted small">
+                      Based on bans, side and basic comp shape – not a
+                      guarantee, just a quick read.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </section>
     </div>
   );
