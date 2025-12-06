@@ -1,51 +1,60 @@
 import React, { useState } from "react";
-import { DraftSimulator } from "./components/DraftSimulator.jsx";
-import { AboutPage } from "./components/AboutPage.jsx";
+import { DraftSimulator } from "./components/DraftSimulator";
+import { AboutPage } from "./components/AboutPage";
 
 export default function App() {
-  const [page, setPage] = useState("draft");
+  const [tab, setTab] = useState("draft");
   const [advanced, setAdvanced] = useState(false);
 
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="logo-text">
-          <div className="logo-title">
-            BRAWL DRAFT <span>LAB</span>
+        <div className="app-header-inner">
+          <div className="app-header-left">
+            <div className="app-logo">BRAWL DRAFT LAB</div>
+            <div className="app-subline">
+              Worlds-style draft helper • built by Carter B. &amp; Andrew R.
+            </div>
           </div>
-          <div className="logo-sub">
-            Worlds-style draft helper • built by Carter B. &amp; Andrew R.
+
+          <div className="app-header-right">
+            <nav className="app-nav">
+              <button
+                className={
+                  tab === "draft" ? "nav-chip nav-chip-active" : "nav-chip"
+                }
+                onClick={() => setTab("draft")}
+              >
+                Draft
+              </button>
+              <button
+                className={
+                  tab === "about" ? "nav-chip nav-chip-active" : "nav-chip"
+                }
+                onClick={() => setTab("about")}
+              >
+                About
+              </button>
+            </nav>
+
+            <label className="advanced-toggle">
+              <input
+                type="checkbox"
+                checked={advanced}
+                onChange={(e) => setAdvanced(e.target.checked)}
+              />
+              <span>Advanced explanations</span>
+            </label>
           </div>
-        </div>
-        <nav className="nav-tabs">
-          <button
-            className={"nav-tab" + (page === "draft" ? " active" : "")}
-            onClick={() => setPage("draft")}
-          >
-            <span className="nav-pill-dot" />
-            <span>Draft</span>
-          </button>
-          <button
-            className={"nav-tab" + (page === "about" ? " active" : "")}
-            onClick={() => setPage("about")}
-          >
-            <span>About</span>
-          </button>
-        </nav>
-        <div className="toggles-row">
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={advanced}
-              onChange={(e) => setAdvanced(e.target.checked)}
-            />
-            <span>Advanced explanations</span>
-          </label>
         </div>
       </header>
-      <main className="app-main">
-        {page === "draft" && <DraftSimulator advanced={advanced} />}
-        {page === "about" && <AboutPage />}
+
+      <main>
+        {tab === "draft" ? (
+          <DraftSimulator advanced={advanced} />
+        ) : (
+          <AboutPage />
+        )}
       </main>
     </div>
   );
