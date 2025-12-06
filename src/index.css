@@ -867,3 +867,38 @@ button {
 .advanced-toggle input {
   accent-color: var(--accent);
 }
+/* ---------- Creator favorite brawlers ---------- */
+
+.favorite-brawlers-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.favorite-brawler {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.favorite-brawler-main {
+  border-color: rgba(255, 215, 64, 0.95);
+  box-shadow: 0 0 14px rgba(255, 215, 64, 0.6);
+}
+
+.favorite-brawler-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 0.4rem;
+  object-fit: cover;
+}
+
+.favorite-brawler-name {
+  font-size: 0.8rem;
+  color: var(--text-strong);
+}
