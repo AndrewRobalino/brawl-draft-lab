@@ -47,7 +47,7 @@ export function DraftSimulator({ advanced }) {
     [state.bans, state.ourPicks, state.enemyPicks]
   );
 
-  // Step gating
+  // Step gating: you must choose side -> then mode -> then map
   const setupReady =
     state.firstPick !== null && !!state.mode && !!state.mapId;
 
@@ -97,7 +97,10 @@ export function DraftSimulator({ advanced }) {
   const isOurTurn =
     state.phase === "picks" && !!currentMap && currentPickInfo.pickingIsUs;
 
-  // Recommendations (logic from your version)
+  // Recommendations only when:
+  // - we’re past bans
+  // - it’s *our* turn to pick
+  // - we have a map selected
   const recommendations = useMemo(() => {
     if (!isOurTurn || !currentMap) return [];
     try {
@@ -121,7 +124,11 @@ export function DraftSimulator({ advanced }) {
     advanced,
   ]);
 
-  // Tier map: must/meta/strong/flex
+  // Assign visual tiers to recommendations:
+  // - mustPick => rainbow MUST PICK
+  // - first non-must => META (gold)
+  // - next 1–2 => STRONG (cyan)
+  // - rest => FLEX (purple)
   const recommendationTiers = useMemo(() => {
     const map = new Map();
     recommendations.forEach((r, index) => {
@@ -138,14 +145,18 @@ export function DraftSimulator({ advanced }) {
     return map;
   }, [recommendations]);
 
-  // Visible brawlers in grid
+  // Brawlers shown in the main grid:
+  // - Setup: none
+  // - Bans: full list (minus taken), with search
+  // - Picks (our turn): recommendations only (unless searching)
+  // - Picks (enemy turn): empty grid (you manually mirror enemy in chips)
   const visibleBrawlers = useMemo(() => {
     if (!setupReady || state.phase === "setup") return [];
 
     const q = state.search.trim().toLowerCase();
     const available = BRAWLERS.filter((b) => !takenSet.has(b.id));
 
-    // If typing, show search results
+    // If user is typing, always show search results
     if (q) {
       return available.filter(
         (b) =>
@@ -191,7 +202,7 @@ export function DraftSimulator({ advanced }) {
     [state.enemyPicks]
   );
 
-  // Simple win chance band
+  // Very light-weight "win chance" – just gives a 35–65% band
   const winChance = useMemo(() => {
     if (state.phase !== "done" || !currentMap) return null;
     const banFactor = state.bans.length / TOTAL_BANS; // 0–1
