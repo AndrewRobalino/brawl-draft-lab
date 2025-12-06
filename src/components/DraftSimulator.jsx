@@ -30,14 +30,28 @@ export function DraftSimulator({ advanced }) {
     [state.mapId]
   );
 
-  // Safer: filter maps by mode every time (no pre-computed map)
   const mapsForMode = useMemo(() => {
     if (!state.mode) return [];
-    const target = state.mode.toLowerCase().trim();
-    return MAPS.filter(
-      (m) => (m.mode || "").toLowerCase().trim() === target
-    );
+
+    const normalize = (s = "") =>
+      s.toLowerCase()
+        .replace(/\s+/g, "")     // remove spaces
+        .replace(/[_-]/g, "")    // remove _ and -
+        .replace(/mode/g, "");   // in case something has "mode" in it
+
+    const target = normalize(state.mode);
+
+    // 1) strict normalized match (preferred)
+    const primary = MAPS.filter((m) => normalize(m.mode) === target);
+    if (primary.length > 0) return primary;
+
+    // 2) fallback: substring match either way
+    return MAPS.filter((m) => {
+      const mm = normalize(m.mode);
+      return mm.includes(target) || target.includes(mm);
+    });
   }, [state.mode]);
+
 
   const takenSet = useMemo(
     () => new Set([...state.bans, ...state.ourPicks, ...state.enemyPicks]),
