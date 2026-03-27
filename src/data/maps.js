@@ -1,4 +1,5 @@
-// src/data/maps.js
+// Maps data — BSC 2026 competitive map pool + legacy maps
+// Modes corrected based on BSC 2026 March Monthly Finals data
 
 export const MAPS = [
   // ---------- GEM GRAB ----------
@@ -9,10 +10,10 @@ export const MAPS = [
     image: "/assets/maps/hard_rock_mine.png",
   },
   {
-    id: "belles_rock",
-    name: "Belle’s Rock",
+    id: "double_swoosh",
+    name: "Double Swoosh",
     mode: "Gem Grab",
-    image: "/assets/maps/belles_rock.png",
+    image: "/assets/maps/double_swoosh.png",
   },
   {
     id: "deathcap_trap",
@@ -29,12 +30,6 @@ export const MAPS = [
 
   // ---------- BRAWL BALL ----------
   {
-    id: "triple_dribble",
-    name: "Triple Dribble",
-    mode: "Brawl Ball",
-    image: "/assets/maps/triple_dribble.png",
-  },
-  {
     id: "pinhole_punt",
     name: "Pinhole Punt",
     mode: "Brawl Ball",
@@ -47,6 +42,12 @@ export const MAPS = [
     image: "/assets/maps/sneaky_fields.png",
   },
   {
+    id: "triple_dribble",
+    name: "Triple Dribble",
+    mode: "Brawl Ball",
+    image: "/assets/maps/triple_dribble.png",
+  },
+  {
     id: "super_beach",
     name: "Super Beach",
     mode: "Brawl Ball",
@@ -55,22 +56,22 @@ export const MAPS = [
 
   // ---------- BOUNTY ----------
   {
-    id: "shooting_star",
-    name: "Shooting Star",
-    mode: "Bounty",
-    image: "/assets/maps/shooting_star.png",
-  },
-  {
     id: "layer_cake",
     name: "Layer Cake",
     mode: "Bounty",
     image: "/assets/maps/layer_cake.png",
   },
   {
-    id: "stormy_plains",
-    name: "Stormy Plains",
+    id: "shooting_star",
+    name: "Shooting Star",
     mode: "Bounty",
-    image: "/assets/maps/stormy_plains.png",
+    image: "/assets/maps/shooting_star.png",
+  },
+  {
+    id: "hideout",
+    name: "Hideout",
+    mode: "Bounty",
+    image: "/assets/maps/hideout.png",
   },
 
   // ---------- HEIST ----------
@@ -79,6 +80,12 @@ export const MAPS = [
     name: "Hot Potato",
     mode: "Heist",
     image: "/assets/maps/hot_potato.png",
+  },
+  {
+    id: "safe_zone",
+    name: "Safe Zone",
+    mode: "Heist",
+    image: "/assets/maps/safe_zone.png",
   },
   {
     id: "kaboom_canyon",
@@ -92,14 +99,20 @@ export const MAPS = [
     mode: "Heist",
     image: "/assets/maps/pit_stop.png",
   },
-  {
-    id: "safe_zone",
-    name: "Safe Zone",
-    mode: "Heist",
-    image: "/assets/maps/safe_zone.png",
-  },
 
   // ---------- HOT ZONE ----------
+  {
+    id: "open_business",
+    name: "Open Business",
+    mode: "Hot Zone",
+    image: "/assets/maps/open_business.png",
+  },
+  {
+    id: "dueling_beetles",
+    name: "Dueling Beetles",
+    mode: "Hot Zone",
+    image: "/assets/maps/dueling_beetles.png",
+  },
   {
     id: "ring_of_fire",
     name: "Ring of Fire",
@@ -115,22 +128,10 @@ export const MAPS = [
 
   // ---------- KNOCKOUT ----------
   {
-    id: "dueling_beetles",
-    name: "Dueling Beetles",
+    id: "out_in_the_open",
+    name: "Out in the Open",
     mode: "Knockout",
-    image: "/assets/maps/dueling_beetles.png",
-  },
-  {
-    id: "open_business",
-    name: "Open Business",
-    mode: "Knockout",
-    image: "/assets/maps/open_business.png",
-  },
-  {
-    id: "dry_season",
-    name: "Dry Season",
-    mode: "Knockout",
-    image: "/assets/maps/dry_season.png",
+    image: "/assets/maps/out_in_the_open.png",
   },
   {
     id: "goldarm_gulch",
@@ -139,15 +140,21 @@ export const MAPS = [
     image: "/assets/maps/goldarm_gulch.png",
   },
   {
+    id: "belles_rock",
+    name: "Belle's Rock",
+    mode: "Knockout",
+    image: "/assets/maps/belles_rock.png",
+  },
+  {
+    id: "dry_season",
+    name: "Dry Season",
+    mode: "Knockout",
+    image: "/assets/maps/dry_season.png",
+  },
+  {
     id: "temple_ruins",
     name: "Temple Ruins",
     mode: "Knockout",
     image: "/assets/maps/temple_ruins.png",
-  },
-  {
-    id: "hideout",
-    name: "Hideout",
-    mode: "Knockout",
-    image: "/assets/maps/hideout.png",
   },
 ];

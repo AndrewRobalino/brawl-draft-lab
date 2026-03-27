@@ -145,7 +145,7 @@ export function DraftSimulator({ advanced }) {
     return tierMap;
   }, [recommendations]);
 
-  // Brawlers shown in the main grid
+  // Brawlers shown in the main grid — always show all available brawlers
   const visibleBrawlers = useMemo(() => {
     if (!setupReady || state.phase === "setup") return [];
 
@@ -160,23 +160,12 @@ export function DraftSimulator({ advanced }) {
       );
     }
 
-    if (state.phase === "bans") {
-      return available;
-    }
-
-    if (state.phase === "picks" && isOurTurn && recommendations.length > 0) {
-      const recIds = new Set(recommendations.map((r) => r.id));
-      return available.filter((b) => recIds.has(b.id));
-    }
-
-    return [];
+    return available;
   }, [
     setupReady,
     state.phase,
     state.search,
     takenSet,
-    isOurTurn,
-    recommendations,
   ]);
 
   const ourTeam = useMemo(
@@ -197,12 +186,9 @@ export function DraftSimulator({ advanced }) {
 
   const winChance = useMemo(() => {
     if (state.phase !== "done" || !currentMap) return null;
-    const banFactor = state.bans.length / TOTAL_BANS;
-    const sideBonus = state.firstPick ? 2 : 0;
-    const raw = 48 + banFactor * 8 + sideBonus;
-    const clamped = Math.max(35, Math.min(65, Math.round(raw)));
-    return clamped;
-  }, [state.phase, currentMap, state.bans.length, state.firstPick]);
+    // No reliable formula for win chance — removed fake calculation
+    return null;
+  }, [state.phase, currentMap]);
 
   const bansRemaining = TOTAL_BANS - state.bans.length;
 
@@ -309,7 +295,7 @@ export function DraftSimulator({ advanced }) {
       <div className="page-header">
         <h1>Brawl Draft Lab – Draft Simulator</h1>
         <p className="page-subtitle">
-          Step through Worlds-style drafts with bans, picks and live suggestions.
+          Step through BSC-style drafts with bans, picks and live suggestions.
         </p>
         <button className="reset-button" onClick={resetDraft}>
           Reset draft
@@ -651,8 +637,8 @@ export function DraftSimulator({ advanced }) {
                 <div className="recommendations-panel">
                   <h3>Recommended picks</h3>
                   <p className="muted">
-                    Suggestions using Worlds-style data, map mode, bans and comp
-                    shape.
+                    Suggestions using BSC 2026 competitive data, map mode, bans
+                    and comp shape.
                   </p>
 
                   {state.phase === "bans" && (

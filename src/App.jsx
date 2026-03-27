@@ -13,7 +13,7 @@ export default function App() {
           <div className="app-header-left">
             <div className="app-logo">BRAWL DRAFT LAB</div>
             <div className="app-subline">
-              Worlds-style draft helper • built by Carter B. &amp; Andrew R.
+              BSC 2026 draft helper • built by Carter B. &amp; Andrew R.
             </div>
           </div>
 
