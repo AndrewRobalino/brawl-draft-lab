@@ -128,6 +128,27 @@ const TANKS = new Set([
 ]);
 
 // ============================================================
+// SUPER THREATS — supers that warp how the enemy must draft
+// groupPull:  pulls/groups enemies together → team wipe potential
+// stun:       long stun that guarantees follow-up kills
+// teamWipe:   super that can kill multiple brawlers at once
+// zonedenial: super that locks down an area for extended time
+// surviveWith: brawler traits that help survive/answer this super
+// ============================================================
+const SUPER_THREATS = {
+  tara:      { type: "groupPull", surviveWith: ["High HP", "Shield", "Team heal"] },
+  gene:      { type: "groupPull", surviveWith: ["High HP", "Shield"] },
+  frank:     { type: "stun", surviveWith: ["Dash", "Invis", "Long range"] },
+  spike:     { type: "zonedenial", surviveWith: ["Dash", "Speed boost", "High HP"] },
+  sandy:     { type: "zonedenial", surviveWith: ["Vision"] },
+  emz:       { type: "zonedenial", surviveWith: ["Dash", "Long range"] },
+  el_primo:  { type: "groupPull", surviveWith: ["High HP", "Knockback"] },
+  jacky:     { type: "groupPull", surviveWith: ["Long range", "Dash"] },
+  lou:       { type: "stun", surviveWith: ["Dash", "Speed boost"] },
+  surge:     { type: "teamWipe", surviveWith: ["High HP", "Shield"] },
+};
+
+// ============================================================
 // BSC 2026 GLOBAL STATS — derived from 100 competitive games
 // ============================================================
 
@@ -411,6 +432,33 @@ function analyzeDraftState(ourPicks, enemyPicks, map) {
     analysis.warnings.push("Multiple brawlers on your team are hard-countered by the enemy comp. This draft is unfavorable.");
   }
 
+  // ── Super threat warnings ──
+  const enemySuperThreats = enemyPicks
+    .filter((p) => SUPER_THREATS[p])
+    .map((p) => ({ id: p, ...SUPER_THREATS[p] }));
+  analysis.enemySuperThreats = enemySuperThreats;
+
+  const pullThreats = enemySuperThreats.filter((t) => t.type === "groupPull");
+  const stunThreats = enemySuperThreats.filter((t) => t.type === "stun");
+
+  if (pullThreats.length > 0) {
+    const names = pullThreats.map((t) => INDEX[t.id]?.name || t.id).join(", ");
+    // Check if our team has anyone who can survive pulls
+    const ourTags = ourPicks.flatMap((p) => ROLE_DATA[p]?.tags || []);
+    const hasSurvival = ourTags.some((t) => ["High HP", "Shield", "Team heal"].includes(t));
+    if (!hasSurvival) {
+      analysis.warnings.push(`${names} has a group pull super — your team has no way to survive it. Pick sustain or high HP.`);
+    } else {
+      analysis.warnings.push(`${names} has a group pull super — be aware. You have some survival tools.`);
+    }
+    analysis.needs.push("anti-pull-sustain");
+  }
+
+  if (stunThreats.length > 0) {
+    const names = stunThreats.map((t) => INDEX[t.id]?.name || t.id).join(", ");
+    analysis.warnings.push(`${names} has a long stun super — avoid grouping, consider mobile brawlers.`);
+  }
+
   // ── Map trait warnings ──
   const traits = map?.traits || {};
   if (traits.openness === "open" && analysis.our.tanks >= 2) {
@@ -610,10 +658,49 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks, draftAnalysis, enem
     }
   }
 
-  // 14. DRAFT POSITION — polarizing picks are risky when enemy still has picks to respond
-  // Count how many brawlers in the full roster hard-counter this pick
-  const totalCountersExist = Object.values(HARD_COUNTERS).flat().filter((c) => c === id).length;
-  // Doesn't count — we want how many brawlers counter US, not who we counter
+  // 14. SUPER THREAT RESPONSE — boost picks that answer enemy super threats
+  if (draftAnalysis && draftAnalysis.enemySuperThreats) {
+    const myTags = roleInfo.tags || [];
+    for (const threat of draftAnalysis.enemySuperThreats) {
+      const surviveWith = threat.surviveWith || [];
+      const canSurvive = myTags.some((t) => surviveWith.includes(t));
+
+      if (threat.type === "groupPull") {
+        // Pulls are devastating — heavily reward brawlers that survive them
+        if (canSurvive) {
+          score += 3;
+        }
+        // Sustain/heal answers pull burst — team heal keeps pulled teammates alive
+        if (myTags.includes("Team heal") || myTags.includes("Turret heal")) {
+          score += 3;
+        }
+        // Shield absorbs follow-up burst after pull
+        if (myTags.includes("Shield")) {
+          score += 2;
+        }
+        // Squishy brawlers with no escape are pull food — penalize
+        if (!canSurvive && !TANKS.has(id) && !SUPPORTS.has(id)) {
+          score -= 2;
+        }
+      }
+
+      if (threat.type === "stun") {
+        // Dash/mobile brawlers can dodge stuns
+        if (canSurvive) score += 2;
+        // Slow immobile brawlers are free stun targets
+        if (!canSurvive && myTags.includes("Turret DPS")) score -= 2;
+      }
+    }
+
+    // If team needs anti-pull-sustain, boost healers and shielders
+    if (draftAnalysis.needs.includes("anti-pull-sustain")) {
+      if (SUPPORTS.has(id)) score += 2;
+      if (myTags.includes("Shield")) score += 2;
+      if (myTags.includes("High HP")) score += 1;
+    }
+  }
+
+  // 15. DRAFT POSITION — polarizing picks are risky when enemy still has picks to respond
   // Recount: how many entries in HARD_COUNTERS[id] exist (brawlers that beat us)
   const myCounterCount = (HARD_COUNTERS[id] || []).length;
 
@@ -630,7 +717,7 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks, draftAnalysis, enem
     score += 2; // safe to pick — they can't respond
   }
 
-  // 15. FULL COMP VULNERABILITY — can this brawler actually function vs the WHOLE enemy team?
+  // 16. FULL COMP VULNERABILITY — can this brawler actually function vs the WHOLE enemy team?
   // Check how many enemy brawlers this pick struggles into (not just hard counters, but bad matchups)
   let badMatchups = 0;
   for (const enemy of enemyPicks) {
@@ -727,6 +814,22 @@ function buildExplanation({ brawlerId, map, meta, enemyPicks, ourPicks, roles, a
     }
     if (draftAnalysis.needs.includes("frontline") && (TANKS.has(brawlerId) || ASSASSINS.has(brawlerId))) {
       parts.push("Gives your team a frontline threat.");
+    }
+  }
+
+  // Super threat response info
+  if (draftAnalysis && draftAnalysis.enemySuperThreats) {
+    const myTags = (ROLE_DATA[brawlerId]?.tags) || [];
+    for (const threat of draftAnalysis.enemySuperThreats) {
+      const canSurvive = myTags.some((t) => (threat.surviveWith || []).includes(t));
+      const threatName = INDEX[threat.id]?.name || threat.id;
+      if (threat.type === "groupPull" && (myTags.includes("Team heal") || myTags.includes("Turret heal"))) {
+        parts.push(`Healing keeps teammates alive through ${threatName}'s pull combo.`);
+      } else if (threat.type === "groupPull" && myTags.includes("Shield")) {
+        parts.push(`Shield absorbs burst after ${threatName}'s pull.`);
+      } else if (threat.type === "groupPull" && !canSurvive && !TANKS.has(brawlerId)) {
+        parts.push(`⚠ Vulnerable to ${threatName}'s pull — no survival tools.`);
+      }
     }
   }
 
