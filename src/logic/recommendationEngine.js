@@ -29,8 +29,8 @@ const ROLE_DATA = {
 
   // --- Assassins ---
   mortis:    { roles: ["Assassin"], tags: ["Dash", "Buffy", "Lane killer"], antiTank: false },
-  leon:      { roles: ["Assassin"], tags: ["Invis", "Buffy", "Clone swap"], antiTank: false },
-  crow:      { roles: ["Assassin", "Control"], tags: ["Poison", "Buffy", "Bouncing kunai"], antiTank: false },
+  leon:      { roles: ["Assassin"], tags: ["Invis", "Buffy", "Clone swap", "Universal threat"], antiTank: false },
+  crow:      { roles: ["Assassin", "Control"], tags: ["Poison", "Buffy", "Bouncing kunai", "Nerfed Mar30"], antiTank: false },
   cordelius: { roles: ["Assassin"], tags: ["Shadow realm", "Anti-heal"], antiTank: true },
   edgar:     { roles: ["Assassin"], tags: ["Lifesteal jump"], antiTank: false },
   fang:      { roles: ["Assassin"], tags: ["Kick chain"], antiTank: false },
@@ -84,7 +84,7 @@ const ROLE_DATA = {
 
   // --- Damage / Flex ---
   colette:  { roles: ["Damage"], tags: ["Tank cutter"], antiTank: true },
-  clancy:   { roles: ["Damage"], tags: ["High DPS"], antiTank: true },
+  clancy:   { roles: ["Damage"], tags: ["Scaling DPS", "Anti-tank conditional", "Buffed Mar30"], antiTank: true },
   amber:    { roles: ["Damage"], tags: ["Continuous beam", "Heist pick"], antiTank: false },
   bea:      { roles: ["Damage"], tags: ["Supercharged shot"], antiTank: true },
   meeple:   { roles: ["Damage"], tags: ["Versatile", "Brawl Ball pick"], antiTank: false },
@@ -116,9 +116,9 @@ const ROLE_DATA = {
   lumi:     { roles: ["Damage"], tags: ["Light"], antiTank: false },
   trunk:    { roles: ["Tank"], tags: ["Charge"], antiTank: false },
   juju:     { roles: ["Thrower"], tags: ["Curse zone"], antiTank: false },
-  gigi:     { roles: ["Damage"], tags: ["Projectile"], antiTank: false },
+  gigi:     { roles: ["Damage", "Control"], tags: ["Projectile", "Zone control", "Buffed Mar30"], antiTank: false },
   maisie:   { roles: ["Damage"], tags: ["Charged shot"], antiTank: true },
-  najia:    { roles: ["Damage"], tags: ["Poison stacker"], antiTank: false },
+  najia:    { roles: ["Damage"], tags: ["Poison stacker", "Nerfed Mar30"], antiTank: false },
   sirius:   { roles: ["Assassin"], tags: ["Shadow clone"], antiTank: false },
 };
 
@@ -133,15 +133,18 @@ const TANKS = new Set([
 
 // Overall win rates when picked (minimum 5 picks for reliability)
 const WIN_RATES = {
+  // BSC 2026 March base + Mar 30 patch adjustments
   eve: 0.833, pam: 0.800, colt: 0.800, kaze: 0.750, lily: 0.700,
   lou: 0.692, nani: 0.667, mortis: 0.650, leon: 0.650, brock: 0.625,
-  emz: 0.615, nita: 0.615, charlie: 0.611, shelly: 0.600, melodie: 0.600,
+  emz: 0.570, nita: 0.615, charlie: 0.611, shelly: 0.600, melodie: 0.600,
   darryl: 0.600, belle: 0.571, sandy: 0.571, penny: 0.571, kit: 0.556,
-  ruffs: 0.524, pierce: 0.526, spike: 0.500, otis: 0.500, stu: 0.500,
-  r_t: 0.500, crow: 0.500, chester: 0.481, bo: 0.471, gene: 0.462,
-  gale: 0.438, bull: 0.429, bibi: 0.429, janet: 0.444,
-  meeple: 0.400, rico: 0.400, squeak: 0.400, gus: 0.385,
+  ruffs: 0.524, pierce: 0.526, spike: 0.485, otis: 0.500, stu: 0.500,
+  r_t: 0.500, crow: 0.470, chester: 0.481, bo: 0.471, gene: 0.462,
+  gale: 0.438, bull: 0.410, bibi: 0.415, janet: 0.444,
+  meeple: 0.400, rico: 0.385, squeak: 0.400, gus: 0.385,
   byron: 0.353, kenji: 0.231,
+  // Mar 30 patch — new entries
+  najia: 0.450, clancy: 0.480, gigi: 0.470, glowy: 0.460, sirius: 0.540,
 };
 
 // Mode-specific pick weights — from BSC 2026 mode analysis
@@ -149,13 +152,13 @@ const WIN_RATES = {
 const MODE_WEIGHTS = {
   "Brawl Ball": {
     leon: 5, charlie: 5, max: 5, bibi: 4, meeple: 3, pierce: 3,
-    emz: 3, poco: 3, gale: 2, chester: 2, otis: 2, stu: 2,
-    el_primo: 2, bull: 2, nita: 2, buzz: 2,
+    emz: 2, poco: 3, gale: 2, chester: 2, otis: 2, stu: 2,
+    el_primo: 2, bull: 2, nita: 2, buzz: 2, sirius: 3,
   },
   "Gem Grab": {
-    chester: 5, lily: 4, otis: 4, sandy: 3, charlie: 3, emz: 3,
+    chester: 5, lily: 4, otis: 4, sandy: 3, charlie: 3, emz: 2,
     mortis: 2, janet: 3, spike: 3, nita: 3, bibi: 2, ruffs: 2,
-    pam: 2, shelly: 2, bo: 2, tara: 2,
+    pam: 2, shelly: 2, bo: 2, tara: 2, sirius: 3, leon: 3,
   },
   "Knockout": {
     eve: 5, gene: 5, brock: 4, crow: 4, r_t: 3, byron: 3,
@@ -163,9 +166,10 @@ const MODE_WEIGHTS = {
     squeak: 2, jae_yong: 2, pearl: 2, ollie: 2, darryl: 2,
   },
   "Hot Zone": {
-    lou: 5, ruffs: 4, stu: 3, emz: 3, chester: 2, spike: 2,
+    lou: 5, ruffs: 4, stu: 3, emz: 2, chester: 2, spike: 2,
     finx: 2, poco: 2, mina: 2, draco: 2, pierce: 2, kenji: 2,
     griff: 2, bibi: 1, bo: 2, mortis: 2, bull: 2,
+    gigi: 2, clancy: 2, leon: 3,
   },
   "Bounty": {
     kaze: 5, belle: 5, pierce: 5, mortis: 4, gene: 3, spike: 3,
@@ -176,46 +180,110 @@ const MODE_WEIGHTS = {
     kaze: 5, colt: 5, melodie: 4, belle: 4, lily: 3, rico: 2,
     amber: 2, bull: 3, byron: 2, "8_bit": 3, penny: 2,
     shade: 2, chuck: 2, ruffs: 2, charlie: 2, r_t: 2, nita: 2,
+    clancy: 3,
   },
 };
 
 // Brawlers that should always be banned per-mode (from BSC ban data)
+// Post Mar 30 patch — Crow still bannable but no longer auto-first-ban everywhere
+// Sirius rising, Emz gadget gutted lowers her ban value
 const MODE_BAN_PRIORITY = {
-  "Brawl Ball": ["crow", "otis", "chester", "emz", "leon"],
-  "Gem Grab": ["crow", "sandy", "emz", "chester", "otis"],
-  "Knockout": ["angelo", "gene", "leon", "brock", "crow"],
-  "Hot Zone": ["crow", "ziggy", "poco", "finx", "lou"],
-  "Bounty": ["mortis", "crow", "byron", "leon", "gene"],
-  "Heist": ["crow", "cordelius", "chuck", "nita", "otis"],
+  "Brawl Ball": ["sirius", "crow", "chester", "leon", "otis"],
+  "Gem Grab": ["sirius", "crow", "sandy", "chester", "otis"],
+  "Knockout": ["angelo", "gene", "leon", "brock", "sirius"],
+  "Hot Zone": ["sirius", "ziggy", "crow", "finx", "lou"],
+  "Bounty": ["mortis", "sirius", "crow", "leon", "gene"],
+  "Heist": ["sirius", "crow", "cordelius", "chuck", "nita"],
 };
 
 // ============================================================
 // HARD COUNTER TABLE — expanded with BSC 2026 meta awareness
 // ============================================================
 const HARD_COUNTERS = {
-  // Tank counters
-  frank:    ["colette", "spike", "emz", "bea", "clancy", "shelly"],
-  bibi:     ["colette", "spike", "emz", "bea"],
-  bull:     ["colette", "spike", "emz", "shelly", "bea"],
-  el_primo: ["colette", "spike", "emz", "crow"],
-  rosa:     ["colette", "spike", "emz"],
-  darryl:   ["spike", "emz", "shelly"],
-  meg:      ["colette", "spike", "emz"],
-  // Sharpshooter counters
-  piper:    ["nani", "mandy", "belle", "mortis"],
-  belle:    ["mandy", "nani"],
-  rico:     ["spike"],
-  // Assassin counters
-  mortis:   ["shelly", "bull", "frank", "bibi"],
-  leon:     ["shelly", "bull", "frank", "emz"],
-  crow:     ["shelly", "bull"],
-  // Support counters
-  poco:     ["crow", "cordelius"],
-  byron:    ["crow", "cordelius"],
-  // Control counters
-  sandy:    ["crow", "leon"],
-  // Overrated pick punishment
-  gale:     ["leon", "mortis", "charlie"],
+  // ── Tanks ── Clancy added broadly as conditional anti-tank after Mar 30 buffs
+  frank:    ["colette", "spike", "emz", "bea", "clancy", "shelly", "mortis"],
+  bibi:     ["colette", "spike", "emz", "bea", "clancy", "mortis"],
+  bull:     ["colette", "spike", "emz", "shelly", "bea", "clancy", "nita"],
+  el_primo: ["colette", "spike", "emz", "crow", "clancy", "darryl"],
+  rosa:     ["colette", "spike", "emz", "clancy", "piper", "bea"],
+  darryl:   ["spike", "emz", "shelly", "clancy", "mortis", "crow"],
+  meg:      ["colette", "spike", "emz", "clancy", "bea"],
+  hank:     ["colette", "spike", "clancy", "belle"],
+  draco:    ["colette", "spike", "emz", "frank"],
+  ash:      ["colette", "spike", "emz", "clancy", "crow", "nita"],
+  jacky:    ["colette", "spike", "emz", "stu"],
+  buzz:     ["griff", "shelly", "emz"],
+  sam:      ["bibi", "hank", "spike"],
+  doug:     ["nani", "brock"],
+
+  // ── Assassins ── high-HP brawlers and spread/AoE punish dive
+  mortis:   ["shelly", "bull", "frank", "bibi", "spike", "tara", "darryl"],
+  leon:     ["shelly", "bull", "frank", "emz", "tara"],
+  crow:     ["shelly", "bull", "el_primo", "tara", "darryl"],
+  edgar:    ["lou", "buzz", "shelly", "bull", "frank", "squeak"],
+  fang:     ["shelly", "bull", "frank", "buzz", "gray"],
+  mico:     ["shelly", "bull", "frank"],
+  shade:    ["shelly", "bull", "frank"],
+  kaze:     ["griff", "chester", "buzz"],
+  melodie:  ["darryl", "bull", "rosa"],
+  kenji:    ["shelly", "bull", "frank"],
+  lily:     ["shelly", "bull", "frank"],
+  cordelius:["frank", "bull"],
+  sirius:   ["penny", "pierce", "tara", "bibi", "ziggy"],  // spread/pierce beats clones
+
+  // ── Sharpshooters ── assassins close the gap
+  piper:    ["mortis", "leon", "edgar", "fang", "nani", "mandy", "belle"],
+  belle:    ["mandy", "nani", "crow", "lou"],
+  rico:     ["spike", "shelly", "crow"],
+  colt:     ["shelly", "el_primo", "bull", "tara"],
+  nani:     ["stu", "mortis"],
+  mandy:    ["crow", "nani", "mortis"],
+  pierce:   ["mortis", "leon"],
+  "8_bit":  ["max", "mortis", "leon"],
+
+  // ── Support ── anti-heal and assassins threaten backline
+  poco:     ["crow", "cordelius", "leon", "tara"],
+  byron:    ["crow", "cordelius", "tick", "colette"],
+  pam:      ["crow", "el_primo", "darryl"],
+  ruffs:    ["el_primo", "bull", "mortis"],
+  max:      ["stu"],
+  gus:      ["mr_p", "shelly", "darryl"],
+
+  // ── Control ── gap closers and out-rangers
+  emz:      ["mortis", "leon", "ash"],
+  sandy:    ["crow", "leon", "gale"],
+  gene:     ["amber", "sprout"],
+  tara:     ["pam", "poco", "crow"],
+  lou:      ["belle", "stu"],
+  otis:     ["hank", "mortis", "8_bit"],
+  charlie:  ["penny", "barley", "juju", "tick"],  // throwers outrange her spiders
+  eve:      ["hank", "mandy", "piper"],
+  bo:       ["mortis", "frank"],
+
+  // ── Throwers ── assassins and fast brawlers close gap
+  barley:   ["mortis", "leon", "edgar", "fang"],
+  tick:     ["mortis", "leon", "edgar", "mr_p"],
+  dynamike: ["mortis", "leon", "edgar", "fang"],
+  sprout:   ["amber", "mortis"],
+  grom:     ["mortis", "leon", "edgar"],
+  squeak:   ["hank", "bea"],
+
+  // ── Damage / Flex ──
+  colette:  ["byron"],
+  clancy:   ["mortis", "leon", "edgar"],  // assassins punish ramp time
+  chester:  ["hank"],
+  penny:    ["jessie", "mortis", "brock"],
+  spike:    ["colt", "el_primo", "tara"],
+  janet:    ["brock", "hank", "tara"],
+  buster:   ["tara", "mortis", "hank"],
+  angelo:   ["edgar", "leon", "crow", "mortis"],
+  kit:      ["mico", "melodie", "poco"],
+  pearl:    ["ash", "jacky", "bibi"],
+  chuck:    ["sandy", "bo", "emz"],
+  griff:    ["penny", "hank", "shelly"],
+
+  // ── Overrated pick punishment ──
+  gale:     ["leon", "mortis", "charlie", "max"],
 };
 
 // ============================================================
@@ -228,14 +296,158 @@ const SYNERGIES = {
   charlie: ["ruffs", "bibi"],
   bibi:    ["charlie", "meeple"],
   ruffs:   ["charlie", "lou"],
-  lou:     ["ruffs", "spike"],
+  lou:     ["ruffs", "spike", "gigi"],
   emz:     ["mortis", "pierce"],
-  mortis:  ["emz", "pierce"],
+  mortis:  ["emz", "pierce", "sirius"],
   crow:    ["brock", "pearl"],
   brock:   ["crow"],
   leon:    ["charlie", "pierce"],
-  spike:   ["lou"],
+  spike:   ["lou", "clancy"],
+  // Mar 30 additions
+  clancy:  ["spike", "emz", "colette"],  // pairs with zone control that lets him ramp
+  gigi:    ["lou", "spike"],              // zone stacking synergy
+  sirius:  ["mortis", "leon"],            // assassin duo pressure
+  colette: ["clancy", "emz"],             // double anti-tank lockdown
 };
+
+// ============================================================
+// ARCHETYPE SETS — for comp-level analysis
+// ============================================================
+const ASSASSINS = new Set([
+  "mortis", "leon", "crow", "cordelius", "edgar", "fang", "mico",
+  "shade", "kaze", "melodie", "kenji", "lily", "sirius",
+]);
+
+const ANTI_TANK_BRAWLERS = new Set(
+  Object.entries(ROLE_DATA)
+    .filter(([, v]) => v.antiTank)
+    .map(([k]) => k)
+);
+
+const SUPPORTS = new Set(["poco", "pam", "gus", "byron", "max", "ruffs", "doug"]);
+
+const THROWERS = new Set(["barley", "tick", "sprout", "dynamike", "grom", "squeak", "juju"]);
+
+const SHARPSHOOTERS = new Set([
+  "piper", "belle", "brock", "colt", "rico", "nani", "mandy", "pierce", "8_bit",
+]);
+
+// ============================================================
+// DRAFT STATE ANALYSIS — understand both teams' comps
+// ============================================================
+
+function analyzeDraftState(ourPicks, enemyPicks, map) {
+  const analysis = {
+    our: { tanks: 0, assassins: 0, antiTank: 0, supports: 0, throwers: 0, sharpshooters: 0, roles: [] },
+    enemy: { tanks: 0, assassins: 0, antiTank: 0, supports: 0, throwers: 0, sharpshooters: 0, roles: [] },
+    warnings: [],
+    needs: [],
+  };
+
+  // Count archetypes for our team
+  for (const p of ourPicks) {
+    if (TANKS.has(p)) analysis.our.tanks++;
+    if (ASSASSINS.has(p)) analysis.our.assassins++;
+    if (ANTI_TANK_BRAWLERS.has(p)) analysis.our.antiTank++;
+    if (SUPPORTS.has(p)) analysis.our.supports++;
+    if (THROWERS.has(p)) analysis.our.throwers++;
+    if (SHARPSHOOTERS.has(p)) analysis.our.sharpshooters++;
+    analysis.our.roles.push(...(ROLE_DATA[p]?.roles || []));
+  }
+
+  // Count archetypes for enemy team
+  for (const p of enemyPicks) {
+    if (TANKS.has(p)) analysis.enemy.tanks++;
+    if (ASSASSINS.has(p)) analysis.enemy.assassins++;
+    if (ANTI_TANK_BRAWLERS.has(p)) analysis.enemy.antiTank++;
+    if (SUPPORTS.has(p)) analysis.enemy.supports++;
+    if (THROWERS.has(p)) analysis.enemy.throwers++;
+    if (SHARPSHOOTERS.has(p)) analysis.enemy.sharpshooters++;
+    analysis.enemy.roles.push(...(ROLE_DATA[p]?.roles || []));
+  }
+
+  // Count how many enemy brawlers hard-counter each archetype we've picked
+  let ourCounteredCount = 0;
+  for (const p of ourPicks) {
+    const counters = HARD_COUNTERS[p] || [];
+    for (const enemy of enemyPicks) {
+      if (counters.includes(enemy)) ourCounteredCount++;
+    }
+  }
+
+  // ── Generate warnings ──
+
+  // Enemy stacking anti-tank and we have tanks
+  if (analysis.enemy.antiTank >= 2 && analysis.our.tanks >= 1) {
+    analysis.warnings.push(`Enemy has ${analysis.enemy.antiTank} anti-tank brawlers — avoid picking more tanks.`);
+  }
+  if (analysis.enemy.antiTank >= 3) {
+    analysis.warnings.push("Enemy comp is built to shred tanks. Picking any tank is very risky.");
+  }
+
+  // We're stacking one archetype too hard
+  if (analysis.our.tanks >= 2) {
+    analysis.warnings.push("Already running 2+ tanks — another tank makes your comp predictable and easy to counter.");
+  }
+  if (analysis.our.assassins >= 2) {
+    analysis.warnings.push("Already running 2+ assassins — comp lacks sustain and zone control.");
+  }
+  if (analysis.our.sharpshooters >= 2) {
+    analysis.warnings.push("Already running 2+ sharpshooters — vulnerable to dive and assassins.");
+  }
+
+  // Enemy has assassins and we have no answer
+  if (analysis.enemy.assassins >= 2 && analysis.our.tanks === 0) {
+    analysis.warnings.push("Enemy has multiple assassins and you have no tanky answer — they will dive your backline.");
+  }
+
+  // Enemy has tanks and we have no anti-tank
+  if (analysis.enemy.tanks >= 2 && analysis.our.antiTank === 0) {
+    analysis.warnings.push("Enemy is tank-heavy and you have no anti-tank — you need a tank shredder.");
+  }
+
+  // Many of our picks are being hard-countered
+  if (ourCounteredCount >= 3) {
+    analysis.warnings.push("Multiple brawlers on your team are hard-countered by the enemy comp. This draft is unfavorable.");
+  }
+
+  // ── Map trait warnings ──
+  const traits = map?.traits || {};
+  if (traits.openness === "open" && analysis.our.tanks >= 2) {
+    analysis.warnings.push("This is an open map — your tanks have no cover to approach. Consider ranged/control instead.");
+  }
+  if (traits.openness === "open" && analysis.our.assassins >= 2) {
+    analysis.warnings.push("Open map with limited approach routes — multiple assassins will struggle to close gaps.");
+  }
+  if (traits.openness === "closed" && analysis.our.sharpshooters >= 2) {
+    analysis.warnings.push("Closed map with heavy walls — sharpshooters lose sightlines. Consider mid-range or close-range brawlers.");
+  }
+  if (traits.zones === 1) {
+    analysis.warnings.push("Single zone map — all fights happen in one area. Sustained damage and healing are king.");
+  }
+  if (traits.zones === 2 && analysis.our.supports >= 2) {
+    analysis.warnings.push("Dual zone map — you need to split pressure. Too many supports limits your ability to contest both zones.");
+  }
+
+  // ── Identify team needs ──
+
+  if (ourPicks.length >= 1) {
+    if (analysis.our.tanks === 0 && analysis.our.assassins === 0) {
+      analysis.needs.push("frontline");
+    }
+    if (analysis.our.supports === 0 && ourPicks.length >= 2) {
+      analysis.needs.push("sustain");
+    }
+    if (analysis.our.antiTank === 0 && analysis.enemy.tanks >= 1) {
+      analysis.needs.push("anti-tank");
+    }
+    if (analysis.our.tanks === 0 && analysis.enemy.assassins >= 2) {
+      analysis.needs.push("tank-to-answer-dive");
+    }
+  }
+
+  return analysis;
+}
 
 // ============================================================
 // SCORING
@@ -248,7 +460,7 @@ function getMapMeta(mapId) {
   return { map, meta: entry };
 }
 
-function scoreBrawler({ id, map, meta, ourPicks, enemyPicks }) {
+function scoreBrawler({ id, map, meta, ourPicks, enemyPicks, draftAnalysis, enemyPicksRemaining }) {
   let score = 0;
   const mode = map?.mode || "";
   const roleInfo = ROLE_DATA[id] || {};
@@ -298,10 +510,14 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks }) {
     }
   }
 
-  // 7. TANK STACKING PENALTY — don't over-stack tanks
+  // 7. TANK STACKING PENALTY — don't over-stack tanks (even in BB now)
   const ourTankCount = ourPicks.filter((p) => TANKS.has(p)).length;
-  if (ourTankCount >= 2 && TANKS.has(id) && mode !== "Brawl Ball") {
-    score -= 4;
+  if (TANKS.has(id)) {
+    if (ourTankCount >= 2) {
+      score -= 8; // never go triple tank
+    } else if (ourTankCount >= 1 && mode !== "Brawl Ball") {
+      score -= 3;
+    }
   }
 
   // 8. ROLE DIVERSITY — penalize stacking identical roles
@@ -317,14 +533,126 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks }) {
   if (id === "kenji" && mode === "Bounty") score -= 3;
   if (id === "bo" && mode === "Knockout") score -= 2;
 
-  return { id, score, roles, antiTank: antiTankFlag };
+  // 10. MAP TRAITS — reward/penalize based on map layout
+  const traits = map?.traits || {};
+  if (traits.openness === "open") {
+    // Open maps: sharpshooters + control thrive, tanks + assassins struggle
+    if (SHARPSHOOTERS.has(id)) score += 2;
+    if (TANKS.has(id)) score -= 3;
+    if (ASSASSINS.has(id) && !roleInfo.tags?.includes("Invis")) score -= 2; // invis assassins can still close gap
+  } else if (traits.openness === "closed") {
+    // Closed maps: tanks + assassins thrive, sharpshooters lose value
+    if (TANKS.has(id)) score += 1;
+    if (ASSASSINS.has(id)) score += 1;
+    if (SHARPSHOOTERS.has(id) && id !== "rico") score -= 1; // Rico bounces off walls so he's fine
+  }
+  if (traits.walls === "heavy") {
+    if (THROWERS.has(id)) score += 2; // throwers love walls
+  }
+  if (traits.walls === "open" || traits.walls === "light") {
+    if (THROWERS.has(id)) score -= 2; // throwers exposed without walls
+  }
+  if (traits.bushes === "heavy") {
+    // Heavy bush maps reward assassins and invis
+    if (ASSASSINS.has(id)) score += 1;
+    if (id === "leon" || id === "sandy" || id === "tara") score += 1; // invis/bush-check value
+  }
+  // Single zone Hot Zone: penalize rotation-dependent brawlers, reward sustained zone hold
+  if (traits.zones === 1) {
+    if (SUPPORTS.has(id)) score += 1; // sustain on single zone is huge
+  }
+  // Dual zone Hot Zone: reward mobility and multi-lane pressure
+  if (traits.zones === 2) {
+    if (roleInfo.tags?.includes("Dash") || id === "stu" || id === "max") score += 1;
+  }
+
+  // 11. BEING COUNTERED PENALTY — don't pick into your own counters
+  const myCounters = HARD_COUNTERS[id] || [];
+  let counterHits = 0;
+  for (const enemy of enemyPicks) {
+    if (myCounters.includes(enemy)) counterHits++;
+  }
+  if (counterHits >= 2) {
+    score -= 6; // multiple enemies counter you — terrible pick
+  } else if (counterHits === 1) {
+    score -= 3; // one enemy counters you — risky
+  }
+
+  // 12. ENEMY COUNTER-COMP PENALTY — if enemy is stacking anti-tank, don't pick tanks
+  if (draftAnalysis) {
+    if (TANKS.has(id) && draftAnalysis.enemy.antiTank >= 2) {
+      score -= 6; // enemy built to kill tanks, don't feed them
+    }
+    if (ASSASSINS.has(id) && draftAnalysis.enemy.tanks >= 2 && !antiTankFlag) {
+      score -= 4; // assassin into tank-heavy comp is rough
+    }
+    if (SHARPSHOOTERS.has(id) && draftAnalysis.enemy.assassins >= 2) {
+      score -= 4; // sharpshooter into assassin-heavy comp gets dove
+    }
+    if (THROWERS.has(id) && draftAnalysis.enemy.assassins >= 1) {
+      score -= 3; // throwers get destroyed by assassins
+    }
+  }
+
+  // 13. ROLE GAP FILLING — boost picks that fill what the team needs
+  if (draftAnalysis && draftAnalysis.needs.length > 0) {
+    if (draftAnalysis.needs.includes("anti-tank") && antiTankFlag) {
+      score += 3;
+    }
+    if (draftAnalysis.needs.includes("frontline") && (TANKS.has(id) || ASSASSINS.has(id))) {
+      score += 2;
+    }
+    if (draftAnalysis.needs.includes("sustain") && SUPPORTS.has(id)) {
+      score += 2;
+    }
+    if (draftAnalysis.needs.includes("tank-to-answer-dive") && TANKS.has(id)) {
+      score += 3;
+    }
+  }
+
+  // 14. DRAFT POSITION — polarizing picks are risky when enemy still has picks to respond
+  // Count how many brawlers in the full roster hard-counter this pick
+  const totalCountersExist = Object.values(HARD_COUNTERS).flat().filter((c) => c === id).length;
+  // Doesn't count — we want how many brawlers counter US, not who we counter
+  // Recount: how many entries in HARD_COUNTERS[id] exist (brawlers that beat us)
+  const myCounterCount = (HARD_COUNTERS[id] || []).length;
+
+  if (enemyPicksRemaining > 0 && myCounterCount >= 5) {
+    // Highly counterable brawler (5+ counters) and enemy still has picks
+    // Scale penalty by how many picks they have left
+    score -= enemyPicksRemaining * 2; // -2 per remaining enemy pick
+  } else if (enemyPicksRemaining > 0 && myCounterCount >= 3) {
+    score -= enemyPicksRemaining * 1; // moderate counter vulnerability
+  }
+
+  // Flip side: if enemy has NO picks left (we're last pick), polarizing picks are safer
+  if (enemyPicksRemaining === 0 && myCounterCount >= 5) {
+    score += 2; // safe to pick — they can't respond
+  }
+
+  // 15. FULL COMP VULNERABILITY — can this brawler actually function vs the WHOLE enemy team?
+  // Check how many enemy brawlers this pick struggles into (not just hard counters, but bad matchups)
+  let badMatchups = 0;
+  for (const enemy of enemyPicks) {
+    const enemyCounters = HARD_COUNTERS[id] || [];
+    if (enemyCounters.includes(enemy)) badMatchups++;
+    // Also check if enemy is a tank and we're a squishy assassin without antiTank
+    if (TANKS.has(enemy) && ASSASSINS.has(id) && !antiTankFlag) badMatchups++;
+    // Sharpshooters struggle vs assassins in their face
+    if (ASSASSINS.has(enemy) && SHARPSHOOTERS.has(id)) badMatchups++;
+  }
+  if (badMatchups >= 2) {
+    score -= 4; // struggles into most of the enemy team — bad pick regardless of one good matchup
+  }
+
+  return { id, score, roles, antiTank: antiTankFlag, counterHits, badMatchups };
 }
 
 // ============================================================
 // EXPLANATIONS
 // ============================================================
 
-function buildExplanation({ brawlerId, map, meta, enemyPicks, ourPicks, roles, antiTank, advanced }) {
+function buildExplanation({ brawlerId, map, meta, enemyPicks, ourPicks, roles, antiTank, counterHits, badMatchups, enemyPicksRemaining, draftAnalysis, advanced }) {
   const b = INDEX[brawlerId];
   if (!b) return { short: "", long: "" };
 
@@ -377,6 +705,47 @@ function buildExplanation({ brawlerId, map, meta, enemyPicks, ourPicks, roles, a
     }
   }
 
+  // Being countered warning
+  if (counterHits >= 2) {
+    const counterNames = enemyPicks
+      .filter((e) => (HARD_COUNTERS[brawlerId] || []).includes(e))
+      .map((e) => INDEX[e]?.name || e).join(", ");
+    parts.push(`⚠ WARNING: Hard-countered by ${counterNames}. Risky pick.`);
+  } else if (counterHits === 1) {
+    const counterName = enemyPicks
+      .find((e) => (HARD_COUNTERS[brawlerId] || []).includes(e));
+    parts.push(`Caution: ${INDEX[counterName]?.name || counterName} counters this pick.`);
+  }
+
+  // Fills team need
+  if (draftAnalysis && draftAnalysis.needs.length > 0) {
+    if (draftAnalysis.needs.includes("anti-tank") && antiTank) {
+      parts.push("Fills your team's need for anti-tank.");
+    }
+    if (draftAnalysis.needs.includes("sustain") && SUPPORTS.has(brawlerId)) {
+      parts.push("Fills your team's need for sustain.");
+    }
+    if (draftAnalysis.needs.includes("frontline") && (TANKS.has(brawlerId) || ASSASSINS.has(brawlerId))) {
+      parts.push("Gives your team a frontline threat.");
+    }
+  }
+
+  // Draft position warning
+  const myCounterCount = (HARD_COUNTERS[brawlerId] || []).length;
+  if (enemyPicksRemaining > 0 && myCounterCount >= 5) {
+    parts.push(`⚠ Easily countered (${myCounterCount} counters) and enemy still has ${enemyPicksRemaining} pick(s) — they can respond. Better as a last pick.`);
+  } else if (enemyPicksRemaining > 0 && myCounterCount >= 3) {
+    parts.push(`Risky: ${myCounterCount} common counters exist and enemy has ${enemyPicksRemaining} pick(s) left.`);
+  }
+  if (enemyPicksRemaining === 0 && myCounterCount >= 5) {
+    parts.push("Safe last pick — enemy can't counter-pick you.");
+  }
+
+  // Full comp vulnerability
+  if (badMatchups >= 2) {
+    parts.push(`⚠ Struggles into ${badMatchups} of ${enemyPicks.length} enemy brawlers — bad matchup spread.`);
+  }
+
   const short = `${name} — ${roleText} pick for ${map?.name || "this map"}.`;
   const long = parts.join(" ");
 
@@ -389,13 +758,13 @@ function buildExplanation({ brawlerId, map, meta, enemyPicks, ourPicks, roles, a
 
 export function getRecommendations({ mapId, ourPicks, enemyPicks, bans, advanced }) {
   const { map, meta } = getMapMeta(mapId);
-  if (!map) return [];
+  if (!map) return { recommendations: [], draftAnalysis: null };
 
-  const taken = new Set([
-    ...(ourPicks || []),
-    ...(enemyPicks || []),
-    ...(bans || []),
-  ]);
+  const our = ourPicks || [];
+  const enemy = enemyPicks || [];
+  const draftAnalysis = analyzeDraftState(our, enemy, map);
+
+  const taken = new Set([...our, ...enemy, ...(bans || [])]);
 
   const scored = [];
 
@@ -405,13 +774,15 @@ export function getRecommendations({ mapId, ourPicks, enemyPicks, bans, advanced
       id: b.id,
       map,
       meta,
-      ourPicks: ourPicks || [],
-      enemyPicks: enemyPicks || [],
+      ourPicks: our,
+      enemyPicks: enemy,
+      draftAnalysis,
+      enemyPicksRemaining: 3 - enemy.length,
     });
     scored.push(s);
   }
 
-  if (!scored.length) return [];
+  if (!scored.length) return { recommendations: [], draftAnalysis };
 
   scored.sort((a, b) => b.score - a.score);
 
@@ -419,16 +790,20 @@ export function getRecommendations({ mapId, ourPicks, enemyPicks, bans, advanced
   const best = top[0]?.score ?? 0;
   const second = top[1]?.score ?? best - 1;
 
-  return top.map((entry, idx) => {
+  const recommendations = top.map((entry, idx) => {
     const b = INDEX[entry.id];
     const expl = buildExplanation({
       brawlerId: entry.id,
       map,
       meta,
-      enemyPicks: enemyPicks || [],
-      ourPicks: ourPicks || [],
+      enemyPicks: enemy,
+      ourPicks: our,
       roles: entry.roles,
       antiTank: entry.antiTank,
+      counterHits: entry.counterHits,
+      badMatchups: entry.badMatchups,
+      enemyPicksRemaining: 3 - enemy.length,
+      draftAnalysis,
       advanced,
     });
 
@@ -439,6 +814,16 @@ export function getRecommendations({ mapId, ourPicks, enemyPicks, bans, advanced
 
     const wr = WIN_RATES[entry.id];
     if (wr !== undefined && wr >= 0.65) tags.push("High WR");
+
+    if (entry.counterHits >= 2) tags.push("⚠ Countered");
+    else if (entry.counterHits === 1) tags.push("Risky matchup");
+
+    if (entry.badMatchups >= 2) tags.push("⚠ Bad comp fit");
+
+    const enemyRemaining = 3 - enemy.length;
+    const brawlerCounterCount = (HARD_COUNTERS[entry.id] || []).length;
+    if (enemyRemaining > 0 && brawlerCounterCount >= 5) tags.push("Better as last pick");
+    if (enemyRemaining === 0 && brawlerCounterCount >= 5) tags.push("Safe last pick");
 
     const mustPick = idx === 0 && best >= second + 4 && best > 0;
 
@@ -452,6 +837,8 @@ export function getRecommendations({ mapId, ourPicks, enemyPicks, bans, advanced
       mustPick,
     };
   });
+
+  return { recommendations, draftAnalysis };
 }
 
 export function getBanSuggestions({ mapId, mode }) {

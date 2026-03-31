@@ -104,9 +104,9 @@ export function DraftSimulator({ advanced }) {
   const isOurTurn =
     state.phase === "picks" && !!currentMap && currentPickInfo.pickingIsUs;
 
-  // Recommendations
-  const recommendations = useMemo(() => {
-    if (!isOurTurn || !currentMap) return [];
+  // Recommendations + draft analysis
+  const { recommendations, draftAnalysis } = useMemo(() => {
+    if (!isOurTurn || !currentMap) return { recommendations: [], draftAnalysis: null };
     try {
       return getRecommendations({
         mapId: currentMap.id,
@@ -117,7 +117,7 @@ export function DraftSimulator({ advanced }) {
       });
     } catch (e) {
       console.error("Recommendation error", e);
-      return [];
+      return { recommendations: [], draftAnalysis: null };
     }
   }, [
     isOurTurn,
@@ -652,6 +652,22 @@ export function DraftSimulator({ advanced }) {
                       Waiting for enemy pick. Mirror their choice in the Enemy side
                       column; we’ll refresh suggestions on your turn.
                     </p>
+                  )}
+
+                  {isOurTurn && draftAnalysis && draftAnalysis.warnings.length > 0 && (
+                    <div className="draft-warnings">
+                      {draftAnalysis.warnings.map((w, i) => (
+                        <p key={i} className="draft-warning">⚠ {w}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  {isOurTurn && draftAnalysis && draftAnalysis.needs.length > 0 && (
+                    <div className="draft-needs">
+                      <p className="muted small">
+                        Your team needs: <strong>{draftAnalysis.needs.join(", ")}</strong>
+                      </p>
+                    </div>
                   )}
 
                   {isOurTurn && recommendations.length === 0 && (

@@ -250,6 +250,23 @@ button {
   border-top: 1px solid var(--border);
 }
 
+.draft-warnings {
+  margin-bottom: 0.75rem;
+}
+.draft-warning {
+  color: #ff6b35;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0.25rem 0;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 107, 53, 0.1);
+  border-left: 3px solid #ff6b35;
+  border-radius: 4px;
+}
+.draft-needs {
+  margin-bottom: 0.75rem;
+}
+
 .recommendation-list {
   display: flex;
   flex-direction: column;
