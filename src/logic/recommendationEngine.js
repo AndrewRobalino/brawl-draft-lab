@@ -72,7 +72,7 @@ const ROLE_DATA = {
   eve:     { roles: ["Control"], tags: ["Air", "Knockout specialist"], antiTank: false },
   bo:      { roles: ["Control"], tags: ["Mines", "Vision"], antiTank: false },
   ollie:   { roles: ["Control"], tags: ["Bounce zone"], antiTank: false },
-  glowbert:{ roles: ["Support", "Damage"], tags: ["Heal/damage flex", "Perma-banned"], antiTank: false },
+  glowy:   { roles: ["Support", "Damage"], tags: ["Heal/damage flex", "Perma-banned"], antiTank: false },
 
   // --- Throwers ---
   barley:   { roles: ["Thrower"], tags: ["Area denial"], antiTank: false },
@@ -357,7 +357,7 @@ const SHARPSHOOTERS = new Set([
 // DRAFT STATE ANALYSIS — understand both teams' comps
 // ============================================================
 
-function analyzeDraftState(ourPicks, enemyPicks, map) {
+export function analyzeDraftState(ourPicks, enemyPicks, map) {
   const analysis = {
     our: { tanks: 0, assassins: 0, antiTank: 0, supports: 0, throwers: 0, sharpshooters: 0, roles: [] },
     enemy: { tanks: 0, assassins: 0, antiTank: 0, supports: 0, throwers: 0, sharpshooters: 0, roles: [] },
@@ -514,6 +514,10 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks, draftAnalysis, enem
   const roleInfo = ROLE_DATA[id] || {};
   const roles = roleInfo.roles || [];
   const antiTankFlag = !!roleInfo.antiTank;
+  const isCloseRange = roleInfo.tags?.includes("Close range") || roleInfo.tags?.includes("Close burst");
+  const isOpenMap = (map?.traits || {}).openness === "open";
+  // Close-range brawler on an open map can't apply their kit — discount matchup-based scores
+  const closeRangeOnOpenMap = isCloseRange && isOpenMap;
 
   // 1. MAP META — how often was this brawler picked on this specific map?
   const mapPicks = meta[id] || 0;
@@ -535,18 +539,21 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks, draftAnalysis, enem
   }
 
   // 4. ANTI-TANK — counter enemy tanks
+  // Close-range anti-tanks on open maps can't get in range to apply pressure — halve the bonus
   const enemyTankCount = enemyPicks.filter((p) => TANKS.has(p)).length;
+  const antiTankMultiplier = closeRangeOnOpenMap ? 0.5 : 1;
   if (enemyTankCount >= 2 && antiTankFlag) {
-    score += 5;
+    score += 5 * antiTankMultiplier;
   } else if (enemyTankCount === 1 && antiTankFlag) {
-    score += 3;
+    score += 3 * antiTankMultiplier;
   }
 
   // 5. HARD COUNTERS — specific matchup advantages
+  // If you counter someone on paper but can't reach them on this map, the counter is worth less
   for (const enemy of enemyPicks) {
     const counters = HARD_COUNTERS[enemy];
     if (counters && counters.includes(id)) {
-      score += 4;
+      score += closeRangeOnOpenMap ? 1 : 4;
     }
   }
 
@@ -588,6 +595,7 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks, draftAnalysis, enem
     if (SHARPSHOOTERS.has(id)) score += 2;
     if (TANKS.has(id)) score -= 3;
     if (ASSASSINS.has(id) && !roleInfo.tags?.includes("Invis")) score -= 2; // invis assassins can still close gap
+    if (isCloseRange && !TANKS.has(id)) score -= 3; // close-range non-tanks (e.g. Shelly) are just as exposed on open maps
   } else if (traits.openness === "closed") {
     // Closed maps: tanks + assassins thrive, sharpshooters lose value
     if (TANKS.has(id)) score += 1;
@@ -645,7 +653,7 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks, draftAnalysis, enem
   // 13. ROLE GAP FILLING — boost picks that fill what the team needs
   if (draftAnalysis && draftAnalysis.needs.length > 0) {
     if (draftAnalysis.needs.includes("anti-tank") && antiTankFlag) {
-      score += 3;
+      score += closeRangeOnOpenMap ? 0 : 3; // close-range anti-tank on open map doesn't actually fill the need
     }
     if (draftAnalysis.needs.includes("frontline") && (TANKS.has(id) || ASSASSINS.has(id))) {
       score += 2;
@@ -739,6 +747,74 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks, draftAnalysis, enem
 // EXPLANATIONS
 // ============================================================
 
+// ── Synergy flavor text — explains WHY two brawlers work together ──
+const SYNERGY_REASONS = {
+  "belle+kaze":    "Belle marks a target and Kaze dashes in for the kill — marked targets melt instantly.",
+  "kaze+belle":    "Kaze can dive anyone Belle marks, turning her poke into guaranteed kills.",
+  "kaze+pierce":   "Pierce holds lanes while Kaze flanks — enemies have to pick which threat to face.",
+  "kaze+gus":      "Gus shield lets Kaze dive deeper and survive the trade.",
+  "pierce+kaze":   "Pierce's lane pressure creates space for Kaze to find angles.",
+  "pierce+emz":    "Pierce and Emz stack zone control — enemies can't walk anywhere safely.",
+  "pierce+mortis":  "Pierce holds mid while Mortis flanks the backline they're forced toward.",
+  "charlie+ruffs":  "Charlie zones and Ruffs power-ups make your team impossible to trade into.",
+  "charlie+bibi":   "Charlie's spiders slow targets and Bibi runs them down — no escape.",
+  "bibi+charlie":   "Bibi forces enemies into Charlie's spider zones.",
+  "bibi+meeple":    "Both dominate Brawl Ball lanes — constant pressure from two angles.",
+  "ruffs+charlie":  "Ruffs power-ups make Charlie's zone control even deadlier to walk into.",
+  "ruffs+lou":      "Ruffs buffs + Lou freeze = enemies can't fight back.",
+  "lou+ruffs":      "Freeze them, then Ruffs-boosted teammates clean up while they're stuck.",
+  "lou+spike":      "Lou freezes, Spike drops super on frozen targets — guaranteed team wipe.",
+  "lou+gigi":       "Both lock down zones — enemies literally cannot contest.",
+  "emz+mortis":     "Emz melts grouped enemies, Mortis dashes in to finish low HP targets.",
+  "emz+pierce":     "Double zone control chokes out the entire map.",
+  "mortis+emz":     "Mortis herds enemies into Emz's spray — they're trapped.",
+  "mortis+pierce":  "Mortis dives backline, Pierce controls mid — total map control.",
+  "mortis+sirius":  "Double assassin pressure — one dives, one flanks. Can't track both.",
+  "crow+brock":     "Crow poisons, Brock finishes from range — the target can't heal back.",
+  "brock+crow":     "Brock pokes them low, Crow's poison prevents recovery.",
+  "leon+charlie":   "Leon goes invisible, Charlie zones off escape routes — nowhere to run.",
+  "leon+pierce":    "Pierce holds the lane, Leon flanks behind — classic pinch setup.",
+  "spike+lou":      "Spike super on frozen targets is a death sentence.",
+  "spike+clancy":   "Spike zones enemies in place while Clancy ramps up damage — by the time they escape, they're dead.",
+  "clancy+spike":   "Spike controls movement, Clancy gets free ramp time.",
+  "clancy+emz":     "Emz melts tanks, Clancy scales DPS — double threat that's hard to itemize against.",
+  "clancy+colette": "Both shred tanks — enemy frontline disappears.",
+  "gigi+lou":       "Double zone lockdown makes contesting impossible.",
+  "gigi+spike":     "Overlapping zones force enemies into lose-lose positions.",
+  "sirius+mortis":  "Two assassins diving at once — backline can't survive.",
+  "sirius+leon":    "Invisible + clones = total chaos for the enemy to track.",
+  "colette+clancy": "Both anti-tank — enemy can't run frontline at all.",
+  "colette+emz":    "Tank shredder duo — anything beefy gets melted.",
+};
+
+function getSynergyReason(a, b) {
+  return SYNERGY_REASONS[`${a}+${b}`] || SYNERGY_REASONS[`${b}+${a}`] || null;
+}
+
+// ── Counter flavor text — explains WHY a brawler counters another ──
+const COUNTER_REASONS = {
+  // Tank counters
+  colette:   "% HP damage melts tanks regardless of how beefy they are",
+  spike:     "slowing super + burst shreds tanks who can't escape",
+  emz:       "constant AoE melts tanks who try to walk through her zone",
+  bea:       "supercharged shots deal massive damage to big targets",
+  clancy:    "ramped-up DPS tears through high-HP brawlers",
+  shelly:    "super blast + close-range burst destroys tanks point blank",
+  // Assassin answers
+  frank:     "stun locks assassins out of their dash combo",
+  bull:      "face-tanks assassin burst and wins the trade up close",
+  bibi:      "knockback stops dive and wins melee trades",
+  tara:      "pull groups diving assassins for easy team follow-up",
+  // Thrower counters
+  mortis:    "dashes straight through walls and kills throwers in 3 hits",
+  leon:      "goes invisible and one-shots throwers before they react",
+  edgar:     "jumps on throwers from anywhere — they can't escape",
+};
+
+function getCounterReason(counterId) {
+  return COUNTER_REASONS[counterId] || "has a kit that beats them in this matchup";
+}
+
 function buildExplanation({ brawlerId, map, meta, enemyPicks, ourPicks, roles, antiTank, counterHits, badMatchups, enemyPicksRemaining, draftAnalysis, advanced }) {
   const b = INDEX[brawlerId];
   if (!b) return { short: "", long: "" };
@@ -748,111 +824,216 @@ function buildExplanation({ brawlerId, map, meta, enemyPicks, ourPicks, roles, a
   const mapPicks = meta[brawlerId] || 0;
   const wr = WIN_RATES[brawlerId];
   const enemyTankCount = enemyPicks.filter((p) => TANKS.has(p)).length;
-  const roleText = roles.length ? roles.join(" / ") : "flex";
+  const roleText = roles.length ? roles.join("/") : "flex";
+  const tags = ROLE_DATA[brawlerId]?.tags || [];
 
-  const parts = [];
+  // Build insight-driven explanation parts
+  const insights = [];  // "why this works" — the core pitch
+  const warnings = [];  // risk flags
 
-  // Map presence
-  if (mapPicks > 0) {
-    parts.push(`Picked ${mapPicks}x on ${map?.name || "this map"} at BSC 2026 March.`);
-  } else {
-    parts.push(`Not a common pick on this map, but fits the current comp.`);
-  }
+  // ── Core pitch: why this brawler right now? ──
 
-  // Win rate
-  if (wr !== undefined) {
-    const wrPct = Math.round(wr * 100);
-    if (wrPct >= 65) parts.push(`${wrPct}% competitive win rate — proven winner.`);
-    else if (wrPct >= 55) parts.push(`Solid ${wrPct}% competitive win rate.`);
-    else if (wrPct < 45) parts.push(`Caution: only ${wrPct}% win rate in competitive.`);
-  }
-
-  // Anti-tank
-  if (enemyTankCount >= 2 && antiTank) {
-    parts.push("Punishes the enemy's tank-heavy comp hard.");
-  } else if (enemyTankCount === 1 && antiTank) {
-    parts.push("Clean answer into the enemy tank.");
-  }
-
-  // Synergy
+  // Synergy insight (most impactful — explains the combo)
   const synergyPartners = SYNERGIES[brawlerId] || [];
   const matchedSynergies = ourPicks.filter((p) => synergyPartners.includes(p));
-  if (matchedSynergies.length > 0) {
-    const names = matchedSynergies.map((p) => INDEX[p]?.name || p).join(", ");
-    parts.push(`Strong synergy with ${names}.`);
-  }
-
-  // Counter info
-  for (const enemy of enemyPicks) {
-    const counters = HARD_COUNTERS[enemy];
-    if (counters && counters.includes(brawlerId)) {
-      const enemyName = INDEX[enemy]?.name || enemy;
-      parts.push(`Directly counters ${enemyName}.`);
-      break;
+  for (const ally of matchedSynergies) {
+    const reason = getSynergyReason(brawlerId, ally);
+    if (reason) {
+      insights.push(reason);
+    } else {
+      insights.push(`Pairs well with ${INDEX[ally]?.name || ally} — proven high win rate combo.`);
     }
   }
 
-  // Being countered warning
-  if (counterHits >= 2) {
-    const counterNames = enemyPicks
-      .filter((e) => (HARD_COUNTERS[brawlerId] || []).includes(e))
-      .map((e) => INDEX[e]?.name || e).join(", ");
-    parts.push(`⚠ WARNING: Hard-countered by ${counterNames}. Risky pick.`);
-  } else if (counterHits === 1) {
-    const counterName = enemyPicks
-      .find((e) => (HARD_COUNTERS[brawlerId] || []).includes(e));
-    parts.push(`Caution: ${INDEX[counterName]?.name || counterName} counters this pick.`);
+  // Counter insight (explains matchup advantage)
+  const countered = [];
+  for (const enemy of enemyPicks) {
+    const enemyCounters = HARD_COUNTERS[enemy];
+    if (enemyCounters && enemyCounters.includes(brawlerId)) {
+      countered.push(enemy);
+    }
+  }
+  if (countered.length > 0) {
+    const target = countered[0];
+    const targetName = INDEX[target]?.name || target;
+    const reason = getCounterReason(brawlerId);
+    if (countered.length === 1) {
+      insights.push(`Shuts down ${targetName} — ${reason}.`);
+    } else {
+      const otherNames = countered.slice(1).map((e) => INDEX[e]?.name || e).join(" and ");
+      insights.push(`Counters ${targetName} and ${otherNames} — ${reason}.`);
+    }
   }
 
-  // Fills team need
+  // Anti-tank insight (comp-level reasoning)
+  if (enemyTankCount >= 2 && antiTank) {
+    insights.push(`Enemy is running ${enemyTankCount} tanks — ${name} shreds through high HP and punishes that comp.`);
+  } else if (enemyTankCount === 1 && antiTank && countered.length === 0) {
+    const tankName = INDEX[enemyPicks.find((p) => TANKS.has(p))]?.name || "their tank";
+    insights.push(`Clean answer into ${tankName} — your team needs someone who can deal with frontline.`);
+  }
+
+  // Map context (not just "picked 3x" — explain why)
+  if (mapPicks >= 5) {
+    insights.push(`Pro staple on ${map?.name || "this map"} — picked ${mapPicks} times in BSC 2026 because the layout plays to their strengths.`);
+  } else if (mapPicks >= 2) {
+    insights.push(`Proven pick on this map (${mapPicks}x in BSC 2026) — the lanes and layout suit this kit.`);
+  }
+
+  // Win rate as validation, not lead
+  if (wr !== undefined) {
+    const wrPct = Math.round(wr * 100);
+    if (wrPct >= 70) {
+      insights.push(`${wrPct}% win rate in competitive — when pros pick this, they win.`);
+    } else if (wrPct >= 60) {
+      insights.push(`Sitting at ${wrPct}% competitive win rate — consistently delivers results.`);
+    } else if (wrPct < 40) {
+      warnings.push(`Only ${wrPct}% win rate in competitive — looks good on paper but hasn't been delivering.`);
+    }
+  }
+
+  // Team composition gap filling (explains the WHY)
   if (draftAnalysis && draftAnalysis.needs.length > 0) {
     if (draftAnalysis.needs.includes("anti-tank") && antiTank) {
-      parts.push("Fills your team's need for anti-tank.");
+      insights.push("Your team has no tank answer yet — this pick gives you the damage to break through their frontline.");
     }
     if (draftAnalysis.needs.includes("sustain") && SUPPORTS.has(brawlerId)) {
-      parts.push("Fills your team's need for sustain.");
+      insights.push("Your team is missing sustain — without heals you'll lose every extended fight.");
     }
-    if (draftAnalysis.needs.includes("frontline") && (TANKS.has(brawlerId) || ASSASSINS.has(brawlerId))) {
-      parts.push("Gives your team a frontline threat.");
+    if (draftAnalysis.needs.includes("frontline") && TANKS.has(brawlerId)) {
+      insights.push("No frontline yet — your backline needs someone to absorb pressure and create space.");
+    }
+    if (draftAnalysis.needs.includes("tank-to-answer-dive") && TANKS.has(brawlerId)) {
+      insights.push("Enemy has multiple assassins — you need a tank to body-block dives and protect your team.");
     }
   }
 
-  // Super threat response info
+  // Super threat response (tactical insight)
   if (draftAnalysis && draftAnalysis.enemySuperThreats) {
-    const myTags = (ROLE_DATA[brawlerId]?.tags) || [];
     for (const threat of draftAnalysis.enemySuperThreats) {
-      const canSurvive = myTags.some((t) => (threat.surviveWith || []).includes(t));
       const threatName = INDEX[threat.id]?.name || threat.id;
-      if (threat.type === "groupPull" && (myTags.includes("Team heal") || myTags.includes("Turret heal"))) {
-        parts.push(`Healing keeps teammates alive through ${threatName}'s pull combo.`);
-      } else if (threat.type === "groupPull" && myTags.includes("Shield")) {
-        parts.push(`Shield absorbs burst after ${threatName}'s pull.`);
-      } else if (threat.type === "groupPull" && !canSurvive && !TANKS.has(brawlerId)) {
-        parts.push(`⚠ Vulnerable to ${threatName}'s pull — no survival tools.`);
+      const canSurvive = tags.some((t) => (threat.surviveWith || []).includes(t));
+
+      if (threat.type === "groupPull") {
+        if (tags.includes("Team heal") || tags.includes("Turret heal")) {
+          insights.push(`${threatName}'s pull will group your team — your healing keeps everyone alive through the burst.`);
+        } else if (tags.includes("Shield")) {
+          insights.push(`Shield absorbs the follow-up damage after ${threatName}'s pull — your team survives the combo.`);
+        } else if (!canSurvive && !TANKS.has(brawlerId) && !SUPPORTS.has(brawlerId)) {
+          warnings.push(`Vulnerable to ${threatName}'s pull — no way to survive the burst that follows.`);
+        }
+      }
+      if (threat.type === "stun" && canSurvive) {
+        insights.push(`Mobile enough to dodge ${threatName}'s stun — won't get locked down.`);
       }
     }
   }
 
-  // Draft position warning
+  // Map trait insights
+  const traits = map?.traits || {};
+  if (traits.openness === "open" && SHARPSHOOTERS.has(brawlerId)) {
+    insights.push("Open map with long sightlines — perfect for this range.");
+  }
+  if (traits.walls === "heavy" && THROWERS.has(brawlerId)) {
+    insights.push("Heavy walls let throwers lob shots safely — the map layout protects them.");
+  }
+  if (traits.bushes === "heavy" && (brawlerId === "leon" || brawlerId === "sandy")) {
+    insights.push("Heavy bush map — invis and bush-checking give massive value here.");
+  }
+
+  // ── Risk warnings ──
+
+  if (counterHits >= 2) {
+    const counterNames = enemyPicks
+      .filter((e) => (HARD_COUNTERS[brawlerId] || []).includes(e))
+      .map((e) => INDEX[e]?.name || e).join(" and ");
+    warnings.push(`Hard-countered by ${counterNames} — they have the tools to shut this down.`);
+  } else if (counterHits === 1) {
+    const counterName = INDEX[enemyPicks.find((e) => (HARD_COUNTERS[brawlerId] || []).includes(e))]?.name;
+    if (counterName) {
+      warnings.push(`${counterName} can punish this pick — play around them.`);
+    }
+  }
+
   const myCounterCount = (HARD_COUNTERS[brawlerId] || []).length;
   if (enemyPicksRemaining > 0 && myCounterCount >= 5) {
-    parts.push(`⚠ Easily countered (${myCounterCount} counters) and enemy still has ${enemyPicksRemaining} pick(s) — they can respond. Better as a last pick.`);
-  } else if (enemyPicksRemaining > 0 && myCounterCount >= 3) {
-    parts.push(`Risky: ${myCounterCount} common counters exist and enemy has ${enemyPicksRemaining} pick(s) left.`);
+    warnings.push(`${myCounterCount} brawlers counter this and enemy still has ${enemyPicksRemaining} pick(s) — they can respond. Save for last pick.`);
   }
   if (enemyPicksRemaining === 0 && myCounterCount >= 5) {
-    parts.push("Safe last pick — enemy can't counter-pick you.");
+    insights.push("Last pick safety — enemy can't counter you now. Free value.");
   }
 
-  // Full comp vulnerability
   if (badMatchups >= 2) {
-    parts.push(`⚠ Struggles into ${badMatchups} of ${enemyPicks.length} enemy brawlers — bad matchup spread.`);
+    warnings.push(`Struggles into ${badMatchups} of ${enemyPicks.length} enemy brawlers — tough game even if you play well.`);
   }
 
-  const short = `${name} — ${roleText} pick for ${map?.name || "this map"}.`;
-  const long = parts.join(" ");
+  // ── Fallback: always generate something ──
+  if (insights.length === 0) {
+    // Role-based fallback
+    const tagStr = tags.length ? tags.join(", ").toLowerCase() : "";
 
-  return { short, long: advanced ? long : parts.slice(0, 2).join(" ") };
+    // Map trait compatibility
+    if (traits.openness === "open" && (roles.includes("Sharpshooter") || roles.includes("Control"))) {
+      insights.push(`${roleText} that thrives on open maps — long sightlines play to this kit.`);
+    } else if (traits.walls === "heavy" && roles.includes("Thrower")) {
+      insights.push(`Thrower that exploits heavy walls — lob damage safely without exposure.`);
+    } else if (traits.bushes === "heavy" && roles.includes("Assassin")) {
+      insights.push(`Bush-heavy map gives assassins free approach routes — can ambush without being seen.`);
+    } else if (traits.openness === "closed" && (roles.includes("Tank") || roles.includes("Assassin"))) {
+      insights.push(`Tight map with plenty of cover to close gaps — ${roleText.toLowerCase()}s can get in range without getting melted.`);
+    }
+
+    // Counter safety
+    const myCounters = (HARD_COUNTERS[brawlerId] || []);
+    const activeCounters = enemyPicks.filter((e) => myCounters.includes(e));
+    if (activeCounters.length === 0 && enemyPicks.length > 0) {
+      insights.push("Safe pick — no hard counters on the enemy team right now.");
+    }
+
+    // Role description from tags
+    if (insights.length === 0) {
+      if (tagStr.includes("heist")) {
+        insights.push(`${roleText} built for Heist — focuses on safe damage and wall breaking.`);
+      } else if (tagStr.includes("hot zone")) {
+        insights.push(`${roleText} that excels at holding zones — sustained presence and area denial.`);
+      } else if (tagStr.includes("knockout")) {
+        insights.push(`${roleText} suited for Knockout — high single-target value in elimination rounds.`);
+      } else if (tagStr.includes("bounty")) {
+        insights.push(`${roleText} that plays well in Bounty — picks off targets and stays alive.`);
+      } else if (tagStr.includes("brawl ball")) {
+        insights.push(`${roleText} with strong Brawl Ball presence — good at controlling the ball and lanes.`);
+      } else if (tagStr.includes("gem grab")) {
+        insights.push(`${roleText} that holds mid well in Gem Grab — controls the gem mine area.`);
+      } else if (roles.includes("Tank")) {
+        insights.push(`Frontline ${roleText.toLowerCase()} — absorbs pressure and creates space for your damage dealers.`);
+      } else if (roles.includes("Support")) {
+        insights.push(`${roleText} that keeps your team alive — sustain wins extended fights.`);
+      } else if (roles.includes("Assassin")) {
+        insights.push(`${roleText} that can eliminate key targets — high kill potential on backline brawlers.`);
+      } else if (roles.includes("Control")) {
+        insights.push(`${roleText} with strong zone control — denies area and forces the enemy to play around you.`);
+      } else if (roles.includes("Sharpshooter")) {
+        insights.push(`${roleText} that applies pressure from range — punishes bad positioning.`);
+      } else {
+        insights.push(`Solid ${roleText.toLowerCase()} option — fills a gap in your comp without getting hard-countered.`);
+      }
+    }
+  }
+
+  // ── Build final output ──
+
+  // Short: punchy one-liner with the strongest insight
+  const shortInsight = insights[0] || `Solid ${roleText} pick for this map and mode.`;
+  const short = shortInsight.length > 80 ? shortInsight.slice(0, 77) + "..." : shortInsight;
+
+  // Long: all insights + warnings
+  const allParts = [...insights, ...warnings.map((w) => `⚠ ${w}`)];
+  const long = allParts.join(" ") || short;
+
+  // Non-advanced: show top 2 insights + first warning if any
+  const brief = [...insights.slice(0, 2), ...(warnings.length > 0 ? [`⚠ ${warnings[0]}`] : [])].join(" ");
+
+  return { short, long: advanced ? long : brief };
 }
 
 // ============================================================
@@ -946,5 +1127,251 @@ export function getRecommendations({ mapId, ourPicks, enemyPicks, bans, advanced
 
 export function getBanSuggestions({ mapId, mode }) {
   const modeKey = mode || MAPS.find((m) => m.id === mapId)?.mode;
-  return MODE_BAN_PRIORITY[modeKey] || [];
+  const ids = MODE_BAN_PRIORITY[modeKey] || [];
+  return ids.map((id) => {
+    const b = INDEX[id];
+    const rd = ROLE_DATA[id];
+    return {
+      id,
+      name: b?.name || id,
+      image: b?.image,
+      roles: rd?.roles || [],
+      tags: rd?.tags || [],
+      reason: getBanReason(id, modeKey),
+    };
+  });
+}
+
+function getBanReason(id, mode) {
+  const wr = WIN_RATES[id];
+  const rd = ROLE_DATA[id];
+  const tags = rd?.tags || [];
+  const wrStr = wr ? `${Math.round(wr * 100)}% WR` : "";
+
+  // Specific ban reasons based on meta knowledge
+  const reasons = {
+    crow:      "Poison poke + slow is oppressive. High presence across all modes.",
+    sirius:    "Shadow clone creates impossible 2v1s. Rising ban priority post-patch.",
+    leon:      "Invisible flank is unreadable in draft — you can't comp around what you can't see.",
+    chester:   "Random kit makes him unpredictable to draft against. Consistently high pick rate.",
+    sandy:     "Sandstorm makes an entire zone unreadable. Gem Grab nightmare.",
+    otis:      "Silence super shuts down key abilities at the worst time.",
+    mortis:    "Dash + lifesteal in Bounty is nearly unbeatable. Must-ban in Bounty/KO.",
+    gene:      "Pull super sets up guaranteed kills. KO/Bounty game-changer.",
+    glowy:     "Perma-banned for a reason — heal/damage flex is too versatile.",
+    ziggy:     "Frequently banned — high zone control value in Hot Zone.",
+    brock:     "Knockout specialist — long range burst + rocket rain zone denial.",
+    lou:       "Freeze locks down Hot Zone entirely. Uncounterable in zone modes.",
+    finx:      "Hot Zone specialist — hard to remove from the zone.",
+    cordelius: "Shadow realm 1v1 removes a player from the fight. Anti-heal shuts down comps.",
+    chuck:     "Rail mobility creates unpredictable flanks in Heist.",
+    angelo:    "Long range poke + flight is oppressive in Knockout.",
+    nita:      "Bear + Nita dual pressure overwhelms in Heist.",
+  };
+
+  if (reasons[id]) return reasons[id];
+  if (wrStr) return `Strong in ${mode} — ${wrStr} competitive.`;
+  return `High priority ban in ${mode}.`;
+}
+
+// ============================================================
+// POST-DRAFT ANALYSIS — win probability + how to play it
+// ============================================================
+
+export function getPostDraftAnalysis(ourPicks, enemyPicks, map) {
+  const analysis = analyzeDraftState(ourPicks, enemyPicks, map);
+  const mode = map?.mode || "";
+  const traits = map?.traits || {};
+  const meta = META_BY_MAP[map?.name] || {};
+
+  // ── Calculate draft favorability ──
+  let ourScore = 50; // start neutral
+
+  // Counter matchup advantage
+  let ourCountered = 0, enemyCountered = 0;
+  for (const p of ourPicks) {
+    for (const e of enemyPicks) {
+      if ((HARD_COUNTERS[p] || []).includes(e)) ourCountered++;
+      if ((HARD_COUNTERS[e] || []).includes(p)) enemyCountered++;
+    }
+  }
+  ourScore += (enemyCountered - ourCountered) * 4;
+
+  // Win rate comparison
+  const ourWR = ourPicks.map((p) => WIN_RATES[p]).filter((w) => w !== undefined);
+  const enemyWR = enemyPicks.map((p) => WIN_RATES[p]).filter((w) => w !== undefined);
+  const avgOur = ourWR.length ? ourWR.reduce((a, b) => a + b, 0) / ourWR.length : 0.5;
+  const avgEnemy = enemyWR.length ? enemyWR.reduce((a, b) => a + b, 0) / enemyWR.length : 0.5;
+  ourScore += (avgOur - avgEnemy) * 30;
+
+  // Map meta — how often were these brawlers picked on this map
+  const ourMapPicks = ourPicks.reduce((s, p) => s + (meta[p] || 0), 0);
+  const enemyMapPicks = enemyPicks.reduce((s, p) => s + (meta[p] || 0), 0);
+  if (ourMapPicks + enemyMapPicks > 0) {
+    ourScore += (ourMapPicks - enemyMapPicks) * 1.5;
+  }
+
+  // Role balance — penalize if missing key roles
+  if (analysis.our.supports === 0 && analysis.enemy.supports > 0) ourScore -= 4;
+  if (analysis.our.tanks === 0 && analysis.our.assassins === 0) ourScore -= 3;
+  if (analysis.our.antiTank === 0 && analysis.enemy.tanks >= 2) ourScore -= 5;
+  if (analysis.enemy.antiTank === 0 && analysis.our.tanks >= 2) ourScore += 5;
+
+  // Anti-tank vs tanks mismatch
+  if (analysis.our.antiTank >= 2 && analysis.enemy.tanks >= 2) ourScore += 4;
+  if (analysis.enemy.antiTank >= 2 && analysis.our.tanks >= 2) ourScore -= 4;
+
+  // Clamp to 15-85 range (never say 0% or 100%)
+  const winPct = Math.max(15, Math.min(85, Math.round(ourScore)));
+
+  // ── Verdict ──
+  let verdict;
+  if (winPct >= 65) verdict = "Your draft is strong — you have clear advantages in this matchup.";
+  else if (winPct >= 55) verdict = "Slight edge to your team — solid comp but don't get comfortable.";
+  else if (winPct >= 45) verdict = "Even draft — this one comes down to execution and micro plays.";
+  else if (winPct >= 35) verdict = "Enemy draft has the edge — they have better answers to your comp.";
+  else verdict = "Tough matchup — enemy comp counters yours hard. You'll need to outplay.";
+
+  // ── How to play it — per brawler tips ──
+  const tips = ourPicks.map((id) => {
+    const b = INDEX[id];
+    const rd = ROLE_DATA[id] || {};
+    const roles = rd.roles || [];
+    const tags = rd.tags || [];
+    const name = b?.name || id;
+    const tipParts = [];
+
+    // Role-based positioning
+    if (TANKS.has(id)) {
+      tipParts.push("Play frontline — absorb pressure and create space.");
+      if (traits.openness === "open") tipParts.push("Use any cover available, don't rush into open ground.");
+      if (analysis.enemy.antiTank >= 2) tipParts.push("Be careful — enemy has anti-tank tools. Don't overcommit.");
+    } else if (ASSASSINS.has(id)) {
+      tipParts.push("Look for picks on isolated targets.");
+      if (traits.bushes === "heavy") tipParts.push("Use bush cover for ambush approaches.");
+      if (analysis.enemy.tanks >= 2) tipParts.push("Avoid the tanks — focus squishier targets.");
+    } else if (SHARPSHOOTERS.has(id)) {
+      tipParts.push("Hold your lane and apply pressure from range.");
+      if (traits.openness === "open") tipParts.push("This map is perfect for you — control sightlines.");
+      if (traits.walls === "heavy") tipParts.push("Watch for throwers and wall-peeks — reposition often.");
+    } else if (SUPPORTS.has(id)) {
+      tipParts.push("Stay behind your frontline and keep the team healthy.");
+      if (analysis.enemy.assassins >= 1) tipParts.push("Watch for dives — save your abilities for when they engage.");
+    } else if (THROWERS.has(id)) {
+      tipParts.push("Play behind walls and deny area.");
+      if (analysis.enemy.assassins >= 1) {
+        const assassinNames = enemyPicks.filter((e) => ASSASSINS.has(e)).map((e) => INDEX[e]?.name || e);
+        tipParts.push(`Stay far from ${assassinNames.join("/")} — they will dive you.`);
+      }
+    } else if (roles.includes("Control")) {
+      tipParts.push("Control the key areas and deny space.");
+      if (mode === "Hot Zone") tipParts.push("Prioritize zone presence over kills.");
+      if (mode === "Gem Grab") tipParts.push("Hold mid and protect the gem carrier.");
+    } else {
+      tipParts.push("Play your range and focus on consistent damage output.");
+    }
+
+    // Mode-specific
+    if (mode === "Heist" && (tags.includes("High DPS") || tags.includes("Heist specialist") || tags.includes("Heist pick"))) {
+      tipParts.push("Focus safe damage when you have an opening — that's your primary job.");
+    }
+    if (mode === "Brawl Ball" && TANKS.has(id)) {
+      tipParts.push("Use your body to shield the ball carrier and create goal opportunities.");
+    }
+    if (mode === "Knockout") {
+      tipParts.push("Don't die first — stay alive and trade efficiently.");
+    }
+    if (mode === "Bounty") {
+      tipParts.push("Avoid unnecessary deaths — every kill matters for the star count.");
+    }
+
+    // Enemy-specific advice
+    for (const e of enemyPicks) {
+      if ((HARD_COUNTERS[id] || []).includes(e)) {
+        tipParts.push(`Avoid direct fights with ${INDEX[e]?.name || e} — they hard-counter you.`);
+        break;
+      }
+    }
+    for (const e of enemyPicks) {
+      const ec = HARD_COUNTERS[e] || [];
+      if (ec.includes(id)) {
+        tipParts.push(`You counter ${INDEX[e]?.name || e} — prioritize targeting them.`);
+        break;
+      }
+    }
+
+    return { id, name, image: b?.image, role: roles[0] || "Flex", tips: tipParts };
+  });
+
+  return { winPct, verdict, tips, analysis };
+}
+
+// ============================================================
+// SETUP INTEL — contextual data for the setup side panel
+// ============================================================
+
+export function getModeIntel(mode) {
+  if (!mode) return null;
+  const banIds = MODE_BAN_PRIORITY[mode] || [];
+  const bans = banIds.slice(0, 5).map((id) => ({
+    id, name: INDEX[id]?.name || id, image: INDEX[id]?.image,
+    reason: getBanReason(id, mode),
+  }));
+
+  // Aggregate top picks across all maps for this mode
+  const modeMaps = MAPS.filter((m) => m.mode === mode);
+  const pickCounts = {};
+  for (const m of modeMaps) {
+    const meta = META_BY_MAP[m.name] || {};
+    for (const [bid, count] of Object.entries(meta)) {
+      pickCounts[bid] = (pickCounts[bid] || 0) + count;
+    }
+  }
+  const topPicks = Object.entries(pickCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([id, picks]) => ({
+      id, name: INDEX[id]?.name || id, image: INDEX[id]?.image, picks,
+      wr: WIN_RATES[id] !== undefined ? Math.round(WIN_RATES[id] * 100) : null,
+    }));
+
+  // Mode-level insight
+  const modeInsights = {
+    "Gem Grab": "Control and sustain dominate. Hold mid, protect the gem carrier. Assassins can work but need the right map.",
+    "Brawl Ball": "Aggro meta — tanks, knockback, and ball carriers. Gale is trap-tier (27% WR). Leon and Charlie are kings.",
+    "Bounty": "Long range and pick potential. Mortis is either banned or dominant. Gene pull = guaranteed kills.",
+    "Heist": "Safe DPS is everything — Colt, Rico, Melodie. Wall breakers open angles in overtime. Protect or destroy the safe.",
+    "Hot Zone": "Zone presence and sustained damage. Lou is the mode king (69% WR). Single-zone maps favor AoE and healing.",
+    "Knockout": "Elimination format — every death matters. Sharpshooters and control brawlers excel. Don't die first.",
+  };
+
+  return { bans, topPicks, insight: modeInsights[mode] || "", mapCount: modeMaps.length };
+}
+
+export function getMapIntel(mapId) {
+  const map = MAPS.find((m) => m.id === mapId);
+  if (!map) return null;
+  const meta = META_BY_MAP[map.name] || {};
+
+  const topPicks = Object.entries(meta)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([id, picks]) => ({
+      id, name: INDEX[id]?.name || id, image: INDEX[id]?.image, picks,
+      wr: WIN_RATES[id] !== undefined ? Math.round(WIN_RATES[id] * 100) : null,
+    }));
+
+  const totalPicks = Object.values(meta).reduce((a, b) => a + b, 0);
+  const traits = map.traits || {};
+
+  return { map, topPicks, totalPicks, traits };
+}
+
+// Expose role data for UI grouping
+export function getBrawlerRole(id) {
+  return ROLE_DATA[id] || null;
+}
+
+export function getAllRoles() {
+  return ROLE_DATA;
 }
