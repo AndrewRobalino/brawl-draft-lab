@@ -39,7 +39,7 @@ export const BRAWLERS = [
   { id: "gale", name: "Gale", image: "/assets/brawlers/gale.webp" },
   { id: "gene", name: "Gene", image: "/assets/brawlers/gene.webp" },
   { id: "gigi", name: "Gigi", image: "/assets/brawlers/gigi.webp" },
-  { id: "glowbert", name: "Glowbert", image: "/assets/brawlers/glowbert.webp" },
+  { id: "glowy", name: "Glowy", image: "/assets/brawlers/glowy.webp" },
   { id: "gray", name: "Gray", image: "/assets/brawlers/gray.webp" },
   { id: "griff", name: "Griff", image: "/assets/brawlers/griff.webp" },
   { id: "grom", name: "Grom", image: "/assets/brawlers/grom.webp" },

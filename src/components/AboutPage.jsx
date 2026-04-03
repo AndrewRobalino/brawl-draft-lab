@@ -1,4 +1,3 @@
-import React from "react";
 
 export function AboutPage() {
   return (
@@ -37,11 +36,15 @@ export function AboutPage() {
         <div className="creator-row">
           <img
             className="creator-avatar"
-            src="/assets/brawlers/draco.webp"
+            src="/assets/avatars/draco.jpg"
             alt="Carter avatar"
           />
           <div>
-            <h3>Carter &quot;GOAT&quot; B.</h3>
+            <h3>
+              <a href="https://brawlify.com/stats/profile/2LP2VJG" target="_blank" rel="noopener noreferrer" className="creator-link">
+                Carter &quot;GOAT&quot; B.
+              </a>
+            </h3>
             <p className="muted small">Sharpshooter / Lane Specialist</p>
             <p className="muted small">
               Lives in draft lobbies, spams Piper, Belle, Mandy and any other
@@ -85,11 +88,15 @@ export function AboutPage() {
         <div className="creator-row">
           <img
             className="creator-avatar"
-            src="/assets/brawlers/frank.webp"
+            src="/assets/avatars/frank.webp"
             alt="Andrew avatar"
           />
           <div>
-            <h3>Andrew &quot;Squadipoo&quot; Robalino</h3>
+            <h3>
+              <a href="https://brawlify.com/stats/profile/LL22UY8" target="_blank" rel="noopener noreferrer" className="creator-link">
+                Andrew &quot;Squadipoo&quot; Robalino
+              </a>
+            </h3>
             <p className="muted small">Mid / Tank Specialist</p>
             <p className="muted small">
               Swaps between control mids and beefy frontliners, focuses on

@@ -15,7 +15,7 @@ export const META_BY_MAP = {
     charlie: 4, lily: 4, chester: 4, ruffs: 4, janet: 3, sandy: 3,
     bibi: 3, spike: 2, pam: 2, kit: 2, mortis: 2, max: 2,
     poco: 2, otis: 2, buzz: 2, rico: 2, trunk: 1, nita: 1,
-    surge: 1, bo: 1, glowbert: 1, emz: 1,
+    surge: 1, bo: 1, glowy: 1, emz: 1,
   },
 
   // ============ BRAWL BALL ============
@@ -24,13 +24,13 @@ export const META_BY_MAP = {
     gale: 9, chester: 6, meeple: 6, leon: 5, bibi: 5, charlie: 5,
     otis: 4, emz: 3, spike: 3, pierce: 3, ruffs: 3, stu: 2,
     hank: 2, kenji: 2, poco: 2, moe: 2, rico: 2, lou: 2, max: 2,
-    meg: 1, buster: 1, lumi: 1, nita: 1, glowbert: 1, fang: 1, trunk: 1,
+    meg: 1, buster: 1, lumi: 1, nita: 1, glowy: 1, fang: 1, trunk: 1,
   },
   "Sneaky Fields": {
     max: 2, el_primo: 2, nita: 2, bull: 2, gale: 2,
     shade: 1, pierce: 1, frank: 1, stu: 1, ruffs: 1,
     rico: 1, buzz: 1, poco: 1, bibi: 1, lou: 1, sandy: 1, willow: 1, moe: 1,
-    glowbert: 1,
+    glowy: 1,
   },
 
   // ============ BOUNTY ============
@@ -62,7 +62,7 @@ export const META_BY_MAP = {
   },
   "Safe Zone": {
     kaze: 3, belle: 3, "8_bit": 2, byron: 2, penny: 2, bull: 2,
-    otis: 1, glowbert: 1, darryl: 1, amber: 1, bo: 1, colette: 1, nita: 1,
+    otis: 1, glowy: 1, darryl: 1, amber: 1, bo: 1, colette: 1, nita: 1,
     leon: 1, melodie: 1, pierce: 1,
   },
 
@@ -78,7 +78,7 @@ export const META_BY_MAP = {
   "Dueling Beetles": {
     lou: 3, finx: 2, griff: 2, ruffs: 2, chester: 2, leon: 1,
     emz: 1, pierce: 1, otis: 1, bull: 1, poco: 1, bo: 1,
-    mortis: 1, mina: 1, glowbert: 1, meeple: 1, berry: 1, kenji: 1,
+    mortis: 1, mina: 1, glowy: 1, meeple: 1, berry: 1, kenji: 1,
     sandy: 1, willow: 1,
   },
   "Ring of Fire": {
@@ -94,12 +94,12 @@ export const META_BY_MAP = {
     byron: 6, r_t: 6, gus: 6, eve: 6, brock: 5, belle: 4, crow: 4,
     nani: 4, bo: 4, leon: 3, squeak: 3, pearl: 3, pierce: 2,
     ollie: 2, angelo: 2, charlie: 2, gene: 2, jae_yong: 2,
-    doug: 1, meeple: 1, gray: 1, glowbert: 1, cordelius: 1,
+    doug: 1, meeple: 1, gray: 1, glowy: 1, cordelius: 1,
   },
   "Goldarm Gulch": {
     r_t: 5, darryl: 2, spike: 2, mortis: 2, bo: 2, brock: 2,
     gene: 1, piper: 1, crow: 1, pearl: 1, leon: 1, byron: 1,
-    gray: 1, pierce: 1, charlie: 1, colt: 1, glowbert: 1,
+    gray: 1, pierce: 1, charlie: 1, colt: 1, glowy: 1,
     jae_yong: 1, bonnie: 1, meeple: 1, belle: 1, mina: 1, tick: 1,
     kit: 1, ollie: 1, angelo: 1, squeak: 1,
   },

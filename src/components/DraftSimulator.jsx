@@ -1,29 +1,75 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { MAPS } from "../data/maps";
 import { BRAWLERS } from "../data/brawlers";
-import { getRecommendations } from "../logic/recommendationEngine";
+import {
+  getRecommendations,
+  getBanSuggestions,
+  analyzeDraftState,
+  getAllRoles,
+  getModeIntel,
+  getMapIntel,
+  getPostDraftAnalysis,
+} from "../logic/recommendationEngine";
 
 const MODES = ["Gem Grab", "Brawl Ball", "Bounty", "Heist", "Hot Zone", "Knockout"];
 const TOTAL_BANS = 6;
-// Worlds-style ABBAAB pattern
 const PICK_PATTERN = ["A", "B", "B", "A", "A", "B"];
+const ROLE_DATA = getAllRoles();
+const ROLE_ORDER = ["Tank", "Assassin", "Sharpshooter", "Support", "Control", "Thrower", "Damage"];
+
+const BRAWLER_INDEX = Object.fromEntries(BRAWLERS.map((b) => [b.id, b]));
+
+function groupBrawlersByRole(brawlers) {
+  const groups = {};
+  for (const role of ROLE_ORDER) groups[role] = [];
+  for (const b of brawlers) {
+    const primary = ROLE_DATA[b.id]?.roles?.[0] || "Damage";
+    (groups[primary] || groups["Damage"]).push(b);
+  }
+  return groups;
+}
+
+function BrawlerImg({ src, name, size = 48, className = "" }) {
+  const [broken, setBroken] = useState(false);
+  if (!src || broken) {
+    return (
+      <div
+        className={`img-placeholder ${className}`}
+        style={{ width: size, height: size, fontSize: size * 0.35 }}
+      >
+        {name?.[0] || "?"}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={name}
+      className={className}
+      style={{ width: size, height: size }}
+      loading="lazy"
+      onError={() => setBroken(true)}
+    />
+  );
+}
 
 function getInitialState() {
   return {
     mode: null,
     mapId: null,
-    firstPick: null, // true = we are A, false = we are B
+    firstPick: null,
     bans: [],
     ourPicks: [],
     enemyPicks: [],
-    phase: "setup", // "setup" | "bans" | "picks" | "done"
+    phase: "setup",
     search: "",
     pendingPick: null,
   };
 }
 
-export function DraftSimulator({ advanced }) {
+export function DraftSimulator() {
   const [state, setState] = useState(getInitialState);
+  const gridRef = useRef(null);
 
   const currentMap = useMemo(
     () => MAPS.find((m) => m.id === state.mapId) || null,
@@ -32,207 +78,103 @@ export function DraftSimulator({ advanced }) {
 
   const mapsForMode = useMemo(() => {
     if (!state.mode) return [];
-
-    const normalize = (s = "") =>
-      s.toLowerCase()
-        .replace(/\s+/g, "")     // remove spaces
-        .replace(/[_-]/g, "")    // remove _ and -
-        .replace(/mode/g, "");   // in case something has "mode" in it
-
+    const normalize = (s = "") => s.toLowerCase().replace(/[\s_-]/g, "").replace(/mode/g, "");
     const target = normalize(state.mode);
-
-    // 1) strict normalized match (preferred)
     const primary = MAPS.filter((m) => normalize(m.mode) === target);
-    if (primary.length > 0) return primary;
-
-    // 2) fallback: substring match either way
-    return MAPS.filter((m) => {
-      const mm = normalize(m.mode);
-      return mm.includes(target) || target.includes(mm);
-    });
+    return primary.length > 0
+      ? primary
+      : MAPS.filter((m) => {
+          const mm = normalize(m.mode);
+          return mm.includes(target) || target.includes(mm);
+        });
   }, [state.mode]);
-
 
   const takenSet = useMemo(
     () => new Set([...state.bans, ...state.ourPicks, ...state.enemyPicks]),
     [state.bans, state.ourPicks, state.enemyPicks]
   );
 
-  // Step gating
-  const setupReady =
-    state.firstPick !== null && !!state.mode && !!state.mapId;
+  const setupReady = state.firstPick !== null && !!state.mode && !!state.mapId;
+
+  // ── Setup intel ──
+  const modeIntel = useMemo(() => getModeIntel(state.mode), [state.mode]);
+  const mapIntel = useMemo(() => getMapIntel(state.mapId), [state.mapId]);
 
   const currentPickInfo = useMemo(() => {
-    if (state.phase === "setup") {
-      return { label: "Draft setup", side: null, pickingIsUs: false };
-    }
-
+    if (state.phase === "setup") return { label: "Setup", side: null, pickingIsUs: false };
     if (state.phase === "bans") {
       const num = state.bans.length + 1;
-      return {
-        label: `Ban ${num} / ${TOTAL_BANS}`,
-        side: num % 2 === 1 ? "Your ban" : "Enemy ban",
-        pickingIsUs: true, // we input both sides' bans
-      };
+      return { label: `Ban ${num}/${TOTAL_BANS}`, side: num % 2 === 1 ? "Your ban" : "Enemy ban", pickingIsUs: true };
     }
-
-    const our = state.ourPicks.length;
-    const enemy = state.enemyPicks.length;
-    const total = our + enemy;
-
-    if (total >= 6 || state.phase === "done") {
-      return { label: "Draft complete", side: null, pickingIsUs: false };
-    }
-
+    const total = state.ourPicks.length + state.enemyPicks.length;
+    if (total >= 6 || state.phase === "done") return { label: "Done", side: null, pickingIsUs: false };
     const turnLetter = PICK_PATTERN[total];
-    const ourSideLetter = state.firstPick ? "A" : "B";
-    const pickingIsUs = turnLetter === ourSideLetter;
+    const pickingIsUs = turnLetter === (state.firstPick ? "A" : "B");
+    return { label: `Pick ${total + 1}/6`, side: pickingIsUs ? "Your pick" : "Enemy pick", pickingIsUs };
+  }, [state.phase, state.bans.length, state.ourPicks.length, state.enemyPicks.length, state.firstPick]);
 
-    return {
-      label: `Pick ${total + 1} / 6`,
-      side: pickingIsUs ? "Your pick" : "Enemy pick",
-      pickingIsUs,
-    };
-  }, [
-    state.phase,
-    state.bans.length,
-    state.ourPicks.length,
-    state.enemyPicks.length,
-    state.firstPick,
-  ]);
+  const isOurTurn = state.phase === "picks" && !!currentMap && currentPickInfo.pickingIsUs;
 
-  const isOurTurn =
-    state.phase === "picks" && !!currentMap && currentPickInfo.pickingIsUs;
+  const banSuggestions = useMemo(() => {
+    if (state.phase !== "bans" || !currentMap) return [];
+    return getBanSuggestions({ mapId: currentMap.id, mode: state.mode }).filter((b) => !takenSet.has(b.id));
+  }, [state.phase, currentMap, state.mode, takenSet]);
 
-  // Recommendations + draft analysis
-  const { recommendations, draftAnalysis } = useMemo(() => {
+  const { recommendations, draftAnalysis: pickAnalysis } = useMemo(() => {
     if (!isOurTurn || !currentMap) return { recommendations: [], draftAnalysis: null };
     try {
-      return getRecommendations({
-        mapId: currentMap.id,
-        ourPicks: state.ourPicks,
-        enemyPicks: state.enemyPicks,
-        bans: state.bans,
-        advanced,
-      });
-    } catch (e) {
-      console.error("Recommendation error", e);
-      return { recommendations: [], draftAnalysis: null };
-    }
-  }, [
-    isOurTurn,
-    currentMap,
-    state.ourPicks,
-    state.enemyPicks,
-    state.bans,
-    advanced,
-  ]);
+      return getRecommendations({ mapId: currentMap.id, ourPicks: state.ourPicks, enemyPicks: state.enemyPicks, bans: state.bans, advanced: true });
+    } catch { return { recommendations: [], draftAnalysis: null }; }
+  }, [isOurTurn, currentMap, state.ourPicks, state.enemyPicks, state.bans]);
 
-  // Tier map for glow colors: must / meta / strong / flex
+  const liveAnalysis = useMemo(() => {
+    if (state.phase === "setup" || !currentMap) return null;
+    if (state.ourPicks.length === 0 && state.enemyPicks.length === 0) return null;
+    return analyzeDraftState(state.ourPicks, state.enemyPicks, currentMap);
+  }, [state.phase, state.ourPicks, state.enemyPicks, currentMap]);
+
+  const draftAnalysis = pickAnalysis || liveAnalysis;
+
+  // ── Post-draft analysis ──
+  const postDraft = useMemo(() => {
+    if (state.phase !== "done" || !currentMap) return null;
+    if (state.ourPicks.length !== 3 || state.enemyPicks.length !== 3) return null;
+    return getPostDraftAnalysis(state.ourPicks, state.enemyPicks, currentMap);
+  }, [state.phase, state.ourPicks, state.enemyPicks, currentMap]);
+
   const recommendationTiers = useMemo(() => {
-    const tierMap = new Map();
-    recommendations.forEach((r, index) => {
-      if (r.mustPick) {
-        tierMap.set(r.id, "must");
-      } else if (index === 0) {
-        tierMap.set(r.id, "meta");
-      } else if (index <= 2) {
-        tierMap.set(r.id, "strong");
-      } else {
-        tierMap.set(r.id, "flex");
-      }
+    const m = new Map();
+    recommendations.forEach((r, i) => {
+      if (r.mustPick) m.set(r.id, "must");
+      else if (i === 0) m.set(r.id, "meta");
+      else if (i <= 2) m.set(r.id, "strong");
+      else m.set(r.id, "flex");
     });
-    return tierMap;
+    return m;
   }, [recommendations]);
 
-  // Brawlers shown in the main grid — always show all available brawlers
   const visibleBrawlers = useMemo(() => {
     if (!setupReady || state.phase === "setup") return [];
-
     const q = state.search.trim().toLowerCase();
     const available = BRAWLERS.filter((b) => !takenSet.has(b.id));
+    if (!q) return available;
+    return available.filter((b) => b.name.toLowerCase().includes(q) || b.id.toLowerCase().includes(q));
+  }, [setupReady, state.phase, state.search, takenSet]);
 
-    if (q) {
-      return available.filter(
-        (b) =>
-          b.name.toLowerCase().includes(q) ||
-          b.id.toLowerCase().includes(q)
-      );
-    }
+  const groupedBrawlers = useMemo(() => groupBrawlersByRole(visibleBrawlers), [visibleBrawlers]);
+  const isSearching = state.search.trim().length > 0;
 
-    return available;
-  }, [
-    setupReady,
-    state.phase,
-    state.search,
-    takenSet,
-  ]);
+  const ourTeam = useMemo(() => state.ourPicks.map((id) => BRAWLER_INDEX[id]).filter(Boolean), [state.ourPicks]);
+  const enemyTeam = useMemo(() => state.enemyPicks.map((id) => BRAWLER_INDEX[id]).filter(Boolean), [state.enemyPicks]);
 
-  const ourTeam = useMemo(
-    () =>
-      state.ourPicks
-        .map((id) => BRAWLERS.find((b) => b.id === id))
-        .filter(Boolean),
-    [state.ourPicks]
-  );
+  const pendingBrawler = state.pendingPick ? BRAWLER_INDEX[state.pendingPick] : null;
 
-  const enemyTeam = useMemo(
-    () =>
-      state.enemyPicks
-        .map((id) => BRAWLERS.find((b) => b.id === id))
-        .filter(Boolean),
-    [state.enemyPicks]
-  );
+  // ── Handlers ──
 
-  const winChance = useMemo(() => {
-    if (state.phase !== "done" || !currentMap) return null;
-    // No reliable formula for win chance — removed fake calculation
-    return null;
-  }, [state.phase, currentMap]);
+  function resetDraft() { setState(getInitialState()); }
 
-  const bansRemaining = TOTAL_BANS - state.bans.length;
-
-  // ---------------- handlers ----------------
-
-  function resetDraft() {
-    setState(getInitialState());
-  }
-
-  function handleFirstPickToggle(value) {
-    setState((prev) =>
-      prev.phase !== "setup" ? prev : { ...prev, firstPick: value }
-    );
-  }
-
-  function handleModeChange(mode) {
-    setState((prev) => {
-      if (prev.phase !== "setup") return prev;
-      return {
-        ...prev,
-        mode,
-        mapId: null, // force user to pick a map
-      };
-    });
-  }
-
-  function handleMapSelect(id) {
-    setState((prev) =>
-      prev.phase !== "setup" ? prev : { ...prev, mapId: id }
-    );
-  }
-
-  function startDraft() {
-    if (!setupReady) return;
-    setState((prev) =>
-      prev.phase !== "setup"
-        ? prev
-        : { ...prev, phase: "bans", pendingPick: null }
-    );
-  }
-
-  function handleBrawlerClick(id) {
-    if (takenSet.has(id)) return;
-    if (state.phase === "setup") return;
+  function selectAndConfirm(id) {
+    if (takenSet.has(id) || state.phase === "setup") return;
     setState((prev) => ({ ...prev, pendingPick: id }));
   }
 
@@ -244,568 +186,474 @@ export function DraftSimulator({ advanced }) {
       if (state.bans.length >= TOTAL_BANS) return;
       setState((prev) => {
         const bans = [...prev.bans, id];
-        const phase = bans.length >= TOTAL_BANS ? "picks" : "bans";
-        return { ...prev, bans, pendingPick: null, phase };
+        return { ...prev, bans, pendingPick: null, phase: bans.length >= TOTAL_BANS ? "picks" : "bans" };
       });
       return;
     }
 
-    // picks
     setState((prev) => {
-      const our = [...prev.ourPicks];
-      const enemy = [...prev.enemyPicks];
+      const our = [...prev.ourPicks], enemy = [...prev.enemyPicks];
       const total = our.length + enemy.length;
-
-      if (total >= 6) {
-        return { ...prev, pendingPick: null, phase: "done" };
-      }
-
+      if (total >= 6) return { ...prev, pendingPick: null, phase: "done" };
       const turnLetter = PICK_PATTERN[total];
-      const ourSideLetter = prev.firstPick ? "A" : "B";
-      const pickingIsUs = turnLetter === ourSideLetter;
-
-      if (pickingIsUs) {
-        our.push(id);
-      } else {
-        enemy.push(id);
-      }
-
+      if (turnLetter === (prev.firstPick ? "A" : "B")) our.push(id);
+      else enemy.push(id);
       const newTotal = our.length + enemy.length;
-      const phase = newTotal >= 6 ? "done" : "picks";
-
-      return {
-        ...prev,
-        ourPicks: our,
-        enemyPicks: enemy,
-        pendingPick: null,
-        phase,
-      };
+      return { ...prev, ourPicks: our, enemyPicks: enemy, pendingPick: null, phase: newTotal >= 6 ? "done" : "picks" };
     });
   }
 
-  function handleUseRecommendation(id) {
-    if (takenSet.has(id)) return;
-    setState((prev) => ({ ...prev, pendingPick: id }));
-  }
-
-  // ---------------- render ----------------
+  // ── Render ──
 
   return (
     <div className="page">
       <div className="page-header">
-        <h1>Brawl Draft Lab – Draft Simulator</h1>
-        <p className="page-subtitle">
-          Step through BSC-style drafts with bans, picks and live suggestions.
-        </p>
-        <button className="reset-button" onClick={resetDraft}>
-          Reset draft
-        </button>
+        <h1>Draft Simulator</h1>
+        <p className="page-subtitle">BSC-style drafts with bans, picks, and live coaching.</p>
       </div>
 
-      {/* SETUP */}
-      <section className="section-card">
-        <h2>Draft setup</h2>
-        <p className="muted">
-          Follow the real draft order: pick side, mode &amp; map, then lock bans
-          and picks in order. Each step unlocks the next.
-        </p>
+      {/* ── SETUP ── */}
+      {state.phase === "setup" && (
+        <div className="setup-layout">
+          <section className="section-card setup-main">
+            <div className="draft-setup-steps">
+              <div>
+                <div className="step-header">
+                  <span className={`step-number ${state.firstPick !== null ? "step-done" : ""}`}>1</span>
+                  <h3>Side</h3>
+                </div>
+                <div className="side-toggle">
+                  <button className={state.firstPick === true ? "chip chip-primary" : "chip chip-ghost"} onClick={() => setState((p) => ({ ...p, firstPick: true }))}>First pick</button>
+                  <button className={state.firstPick === false ? "chip chip-primary" : "chip chip-ghost"} onClick={() => setState((p) => ({ ...p, firstPick: false }))}>Last pick</button>
+                </div>
+              </div>
 
-        <div className="draft-setup-grid">
-          {/* Step 1 – side */}
-          <div>
-            <h3>Side</h3>
-            <p className="muted">
-              Step 1 – choose whether your team has first pick or last pick.
-            </p>
-            <div className="side-toggle">
-              <button
-                className={
-                  state.firstPick === true ? "chip chip-primary" : "chip chip-ghost"
-                }
-                onClick={() => handleFirstPickToggle(true)}
-              >
-                First pick
-              </button>
-              <button
-                className={
-                  state.firstPick === false ? "chip chip-primary" : "chip chip-ghost"
-                }
-                onClick={() => handleFirstPickToggle(false)}
-              >
-                Last pick
+              <div>
+                <div className="step-header">
+                  <span className={`step-number ${state.mode ? "step-done" : ""}`}>2</span>
+                  <h3>Mode</h3>
+                </div>
+                {state.firstPick === null ? (
+                  <p className="muted small">Pick your side first.</p>
+                ) : (
+                  <div className="mode-chips">
+                    {MODES.map((mode) => (
+                      <button key={mode} className={state.mode === mode ? "chip chip-primary" : "chip chip-ghost"} onClick={() => setState((p) => ({ ...p, mode, mapId: null }))}>{mode}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="step-header">
+                  <span className={`step-number ${state.mapId ? "step-done" : ""}`}>3</span>
+                  <h3>Map</h3>
+                </div>
+                {!state.mode ? (
+                  <p className="muted small">Pick a mode first.</p>
+                ) : (
+                  <div className="map-grid">
+                    {mapsForMode.map((m) => (
+                      <button key={m.id} className={state.mapId === m.id ? "map-tile map-tile-selected" : "map-tile"} onClick={() => setState((p) => ({ ...p, mapId: m.id }))}>
+                        <div className="map-image" style={{ backgroundImage: `url(${m.image})` }} />
+                        <div className="map-label">
+                          <div className="map-name">{m.name}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="start-draft-row">
+              <button className="primary-button" onClick={() => setState((p) => ({ ...p, phase: "bans", pendingPick: null }))} disabled={!setupReady}>
+                {setupReady ? "Start draft" : "Complete all 3 steps"}
               </button>
             </div>
-          </div>
+          </section>
 
-          {/* Step 2 – mode */}
-          <div>
-            <h3>Game mode</h3>
-            <p className="muted">Step 2 – select the mode you’re playing.</p>
-            {state.firstPick === null ? (
-              <p className="muted small">
-                Choose First pick or Last pick in Step 1 to unlock game modes.
-              </p>
-            ) : (
-              <div className="mode-chips">
-                {MODES.map((mode) => (
-                  <button
-                    key={mode}
-                    className={
-                      state.mode === mode ? "chip chip-primary" : "chip chip-ghost"
-                    }
-                    onClick={() => handleModeChange(mode)}
-                  >
-                    {mode}
-                  </button>
-                ))}
+          {/* ── Intel Side Panel ── */}
+          <aside className="intel-panel">
+            {!state.mode && !modeIntel && (
+              <div className="intel-empty">
+                <div className="intel-empty-icon">?</div>
+                <p>Select a mode to see meta intel</p>
+                <p className="muted small">Ban priorities, top picks, and mode tips powered by BSC 2026 data.</p>
               </div>
             )}
-          </div>
 
-          {/* Step 3 – map */}
-          <div>
-            <h3>Map</h3>
-            <p className="muted">Step 3 – choose the exact map from the pool.</p>
-            {!state.mode ? (
-              <p className="muted small">
-                Select a game mode in Step 2 to unlock the map pool.
-              </p>
-            ) : (
-              <div className="map-grid">
-                {mapsForMode.map((m) => (
-                  <button
-                    key={m.id}
-                    className={
-                      state.mapId === m.id ? "map-tile map-tile-selected" : "map-tile"
-                    }
-                    onClick={() => handleMapSelect(m.id)}
-                  >
-                    {m.image && (
-                      <div
-                        className="map-image"
-                        style={{ backgroundImage: `url(${m.image})` }}
-                      />
-                    )}
-                    <div className="map-label">
-                      <div className="map-name">{m.name}</div>
-                      <div className="map-mode">{m.mode}</div>
+            {modeIntel && (
+              <div className="intel-section">
+                <div className="intel-header">
+                  <span className="intel-label">{state.mode}</span>
+                  <span className="intel-sub">{modeIntel.mapCount} maps</span>
+                </div>
+                <p className="intel-insight">{modeIntel.insight}</p>
+
+                {modeIntel.topPicks.length > 0 && (
+                  <div className="intel-block">
+                    <div className="intel-block-title">Top picks</div>
+                    <div className="intel-pick-list">
+                      {modeIntel.topPicks.map((p) => (
+                        <div key={p.id} className="intel-pick-row">
+                          <BrawlerImg src={p.image} name={p.name} size={24} className="intel-pick-img" />
+                          <span className="intel-pick-name">{p.name}</span>
+                          <span className="intel-pick-stat">{p.picks}x picked</span>
+                          {p.wr !== null && <span className={`intel-pick-wr ${p.wr >= 60 ? "wr-high" : p.wr < 45 ? "wr-low" : ""}`}>{p.wr}%</span>}
+                        </div>
+                      ))}
                     </div>
-                  </button>
-                ))}
+                  </div>
+                )}
 
-                {mapsForMode.length === 0 && (
-                  <p className="muted small">
-                    No maps found for this mode – double-check your map data.
-                  </p>
+                {modeIntel.bans.length > 0 && (
+                  <div className="intel-block">
+                    <div className="intel-block-title">Ban priority</div>
+                    <div className="intel-ban-list">
+                      {modeIntel.bans.map((b) => (
+                        <div key={b.id} className="intel-ban-row">
+                          <BrawlerImg src={b.image} name={b.name} size={20} className="intel-ban-img" />
+                          <span className="intel-ban-name">{b.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
-          </div>
-        </div>
 
-        <div className="start-draft-row">
-          <button
-            className="primary-button"
-            onClick={startDraft}
-            disabled={!setupReady || state.phase !== "setup"}
-          >
-            {setupReady ? "Start bans" : "Finish steps 1–3 to start draft"}
-          </button>
-          {state.phase !== "setup" && (
-            <span className="muted small">
-              Setup locked in. Use Reset if you need to run it back.
-            </span>
-          )}
-        </div>
-      </section>
-
-      {/* LIVE DRAFT */}
-      <section className="section-card draft-section">
-        {state.phase === "setup" ? (
-          <p className="muted">
-            Complete setup above and press <strong>Start bans</strong> to unlock the
-            live draft tools, recommendations and final overview.
-          </p>
-        ) : (
-          <>
-            <div className="draft-layout">
-              {/* Left column – status & history */}
-              <div className="draft-status-column">
-                <div className="draft-phase-header">
-                  <span className={`phase-badge phase-${state.phase}`}>
-                    {state.phase === "bans"
-                      ? "Bans"
-                      : state.phase === "picks"
-                      ? "Picks"
-                      : "Done"}
-                  </span>
-                  <h2>Live draft</h2>
-                </div>
-
-                <p className="muted">
-                  {state.phase === "bans" &&
-                    `${bansRemaining} ban${
-                      bansRemaining === 1 ? "" : "s"
-                    } left. Click a brawler then Confirm to lock each ban.`}
-                  {state.phase === "picks" &&
-                    (currentPickInfo.pickingIsUs
-                      ? "It’s your pick. Choose a brawler below, then Confirm."
-                      : "Enemy pick – mirror their choice so suggestions stay accurate.")}
-                  {state.phase === "done" &&
-                    "Draft is finished. Review the VS screen below, then get ready for the match."}
-                </p>
-
-                <div className="current-pick-box">
-                  <div className="current-pick-label">{currentPickInfo.label}</div>
-                  {currentPickInfo.side && (
-                    <div className="current-pick-side">{currentPickInfo.side}</div>
-                  )}
-                  <button
-                    className="primary-button confirm-button"
-                    onClick={confirmPending}
-                    disabled={!state.pendingPick}
-                  >
-                    Confirm
-                  </button>
-                </div>
-
-                <div className="team-columns">
-                  <div className="team-column">
-                    <h3>Your side</h3>
-                    <p className="muted">Track your bans and picks as you go.</p>
-                    <div className="side-tag">
-                      {state.firstPick === null
-                        ? "Side not set"
-                        : state.firstPick
-                        ? "First pick"
-                        : "Last pick"}
-                    </div>
-
-                    <h4>Bans</h4>
-                    <div className="chip-row">
-                      {state.bans.length === 0 && (
-                        <span className="muted small">No bans locked yet.</span>
-                      )}
-                      {state.bans.map((id) => {
-                        const b = BRAWLERS.find((x) => x.id === id);
-                        return (
-                          <div key={id} className="brawler-chip">
-                            {b?.image && (
-                              <img
-                                src={b.image}
-                                alt={b?.name || id}
-                                className="brawler-chip-image"
-                              />
-                            )}
-                            <span className="brawler-chip-name">
-                              {b?.name || id}
-                            </span>
-                            <span className="badge badge-ban">Ban</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <h4>Your picks</h4>
-                    <div className="chip-row">
-                      {state.ourPicks.length === 0 && (
-                        <span className="muted small">No picks yet.</span>
-                      )}
-                      {state.ourPicks.map((id) => {
-                        const b = BRAWLERS.find((x) => x.id === id);
-                        return (
-                          <div key={id} className="brawler-chip">
-                            {b?.image && (
-                              <img
-                                src={b.image}
-                                alt={b?.name || id}
-                                className="brawler-chip-image"
-                              />
-                            )}
-                            <span className="brawler-chip-name">
-                              {b?.name || id}
-                            </span>
-                            <span className="badge badge-you">You</span>
-                          </div>
-                        );
-                      })}
-                    </div>
+            {mapIntel && (
+              <div className="intel-section intel-map-section">
+                <div className="intel-map-preview" style={{ backgroundImage: `url(${mapIntel.map.image})` }}>
+                  <div className="intel-map-overlay">
+                    <div className="intel-map-name">{mapIntel.map.name}</div>
                   </div>
+                </div>
 
-                  <div className="team-column">
-                    <h3>Enemy side</h3>
-                    <p className="muted">
-                      Mirror their picks so suggestions stay accurate.
-                    </p>
+                <div className="intel-traits">
+                  <span className="trait-chip">Walls: {mapIntel.traits.walls || "?"}</span>
+                  <span className="trait-chip">Bushes: {mapIntel.traits.bushes || "?"}</span>
+                  <span className="trait-chip">Openness: {mapIntel.traits.openness || "?"}</span>
+                  {mapIntel.traits.zones && <span className="trait-chip">{mapIntel.traits.zones} zone{mapIntel.traits.zones > 1 ? "s" : ""}</span>}
+                </div>
 
-                    <h4>Enemy picks</h4>
-                    <div className="chip-row">
-                      {state.enemyPicks.length === 0 && (
-                        <span className="muted small">No enemy picks yet.</span>
-                      )}
-                      {state.enemyPicks.map((id) => {
-                        const b = BRAWLERS.find((x) => x.id === id);
+                {mapIntel.traits.notes && (
+                  <p className="intel-map-notes">{mapIntel.traits.notes}</p>
+                )}
+
+                {mapIntel.topPicks.length > 0 && (
+                  <div className="intel-block">
+                    <div className="intel-block-title">BSC picks on this map</div>
+                    <div className="intel-pick-list">
+                      {mapIntel.topPicks.map((p) => (
+                        <div key={p.id} className="intel-pick-row">
+                          <BrawlerImg src={p.image} name={p.name} size={24} className="intel-pick-img" />
+                          <span className="intel-pick-name">{p.name}</span>
+                          <span className="intel-pick-stat">{p.picks}x</span>
+                          {p.wr !== null && <span className={`intel-pick-wr ${p.wr >= 60 ? "wr-high" : p.wr < 45 ? "wr-low" : ""}`}>{p.wr}%</span>}
+                        </div>
+                      ))}
+                    </div>
+                    {mapIntel.totalPicks > 0 && (
+                      <div className="intel-total">{mapIntel.totalPicks} total picks across BSC 2026</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </aside>
+        </div>
+      )}
+
+      {/* ── LIVE DRAFT ── */}
+      {state.phase !== "setup" && (
+        <>
+          {/* Sticky confirm bar */}
+          <div className="sticky-confirm-bar">
+            <div className="confirm-bar-inner">
+              <div className="confirm-bar-left">
+                <span className={`phase-badge phase-${state.phase}`}>
+                  {state.phase === "bans" ? "BANS" : state.phase === "picks" ? "PICKS" : "DONE"}
+                </span>
+                <span className="confirm-bar-label">{currentPickInfo.label}</span>
+                {currentPickInfo.side && <span className="confirm-bar-side">{currentPickInfo.side}</span>}
+                {/* Map indicator */}
+                {currentMap && (
+                  <div className="confirm-bar-map">
+                    <div className="confirm-bar-map-thumb" style={{ backgroundImage: `url(${currentMap.image})` }} />
+                    <span className="confirm-bar-map-name">{currentMap.name}</span>
+                  </div>
+                )}
+              </div>
+              <div className="confirm-bar-right">
+                {pendingBrawler && (
+                  <div className="confirm-bar-pending">
+                    <BrawlerImg src={pendingBrawler.image} name={pendingBrawler.name} size={28} className="confirm-bar-img" />
+                    <span>{pendingBrawler.name}</span>
+                  </div>
+                )}
+                <button className="primary-button" onClick={confirmPending} disabled={!state.pendingPick}>
+                  {state.pendingPick ? "Confirm" : "Select a brawler"}
+                </button>
+                <button className="reset-button" onClick={resetDraft}>Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="draft-content">
+            {/* ── Top row: teams ── */}
+            <div className="draft-teams-row">
+              <div className="team-card team-card-you">
+                <div className="team-card-header">Your team</div>
+                <div className="team-slots">
+                  {state.bans.length > 0 && (
+                    <div className="team-bans">
+                      {state.bans.map((id) => {
+                        const b = BRAWLER_INDEX[id];
                         return (
-                          <div key={id} className="brawler-chip">
-                            {b?.image && (
-                              <img
-                                src={b.image}
-                                alt={b?.name || id}
-                                className="brawler-chip-image"
-                              />
-                            )}
-                            <span className="brawler-chip-name">
-                              {b?.name || id}
-                            </span>
-                            <span className="badge badge-enemy">Enemy</span>
+                          <div key={id} className="mini-chip mini-chip-ban" title={b?.name}>
+                            <BrawlerImg src={b?.image} name={b?.name} size={22} className="mini-chip-img" />
                           </div>
                         );
                       })}
                     </div>
+                  )}
+                  <div className="team-picks">
+                    {[0, 1, 2].map((i) => {
+                      const b = ourTeam[i];
+                      return (
+                        <div key={i} className={`pick-slot ${b ? "pick-slot-filled" : ""}`}>
+                          {b ? <BrawlerImg src={b.image} name={b.name} size={44} className="pick-slot-img" /> : <span className="pick-slot-empty">{i + 1}</span>}
+                          {b && <div className="pick-slot-name">{b.name}</div>}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
 
-              {/* Right column – search + recommendations */}
-              <div className="draft-action-column">
-                <div className="search-header">
-                  <h3>Brawler search</h3>
-                  <p className="muted">
-                    Type to filter, or tap a recommended pick when it’s your turn.
-                  </p>
-                  <input
-                    type="text"
-                    value={state.search}
-                    onChange={(e) =>
-                      setState((prev) => ({ ...prev, search: e.target.value }))
-                    }
-                    placeholder="Search brawler name…"
-                    className="search-input"
-                  />
+              <div className="vs-divider">VS</div>
+
+              <div className="team-card team-card-enemy">
+                <div className="team-card-header">Enemy team</div>
+                <div className="team-slots">
+                  <div className="team-picks">
+                    {[0, 1, 2].map((i) => {
+                      const b = enemyTeam[i];
+                      return (
+                        <div key={i} className={`pick-slot ${b ? "pick-slot-filled" : ""}`}>
+                          {b ? <BrawlerImg src={b.image} name={b.name} size={44} className="pick-slot-img" /> : <span className="pick-slot-empty">{i + 1}</span>}
+                          {b && <div className="pick-slot-name">{b.name}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
+              </div>
+            </div>
 
-                <div className="brawler-grid">
-                  {visibleBrawlers.map((b) => {
-                    const isPending = state.pendingPick === b.id;
-                    const tier = recommendationTiers.get(b.id);
+            {/* ── Live coaching feedback ── */}
+            {draftAnalysis && (draftAnalysis.warnings.length > 0 || draftAnalysis.needs.length > 0) && (
+              <div className="live-feedback">
+                {draftAnalysis.warnings.map((w, i) => (
+                  <div key={i} className="draft-warning">{w}</div>
+                ))}
+                {draftAnalysis.needs.length > 0 && (
+                  <div className="draft-need">Your team needs: <strong>{draftAnalysis.needs.join(", ")}</strong></div>
+                )}
+              </div>
+            )}
 
-                    const classNames = [
-                      "brawler-tile",
-                      takenSet.has(b.id) ? "disabled" : "",
-                      tier ? "recommended" : "",
-                      tier === "must" ? "must" : "",
-                      tier === "meta" ? "tier-meta" : "",
-                      tier === "strong" ? "tier-strong" : "",
-                      tier === "flex" ? "tier-flex" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ");
+            {/* ── Ban suggestions ── */}
+            {state.phase === "bans" && banSuggestions.length > 0 && (
+              <div className="ban-suggestions">
+                <h3>Suggested bans — {state.mode} on {currentMap?.name}</h3>
+                <div className="ban-suggestion-list">
+                  {banSuggestions.map((b) => (
+                    <button key={b.id} className={`ban-suggestion-card ${state.pendingPick === b.id ? "ban-suggestion-selected" : ""}`} onClick={() => selectAndConfirm(b.id)}>
+                      <BrawlerImg src={b.image} name={b.name} size={36} className="ban-suggestion-img" />
+                      <div className="ban-suggestion-info">
+                        <div className="ban-suggestion-name">{b.name}</div>
+                        <div className="ban-suggestion-reason">{b.reason}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
+            {/* ── Recommendations ── */}
+            {isOurTurn && recommendations.length > 0 && (
+              <div className="recommendations-panel">
+                <h3>Recommended picks</h3>
+                <div className="recommendation-list">
+                  {recommendations.map((r) => {
+                    const tier = recommendationTiers.get(r.id);
+                    const cls = [
+                      "recommendation-card",
+                      tier === "must" && "recommendation-card-must",
+                      tier === "meta" && "recommendation-card-meta",
+                      tier === "strong" && "recommendation-card-strong",
+                      tier === "flex" && "recommendation-card-flex",
+                    ].filter(Boolean).join(" ");
                     return (
-                      <button
-                        key={b.id}
-                        className={classNames}
-                        onClick={() => handleBrawlerClick(b.id)}
-                        disabled={takenSet.has(b.id)}
-                      >
-                        {b.image && (
-                          <img
-                            src={b.image}
-                            alt={b.name}
-                            className="brawler-portrait"
-                          />
-                        )}
-                        <div className="brawler-name">{b.name}</div>
-                        {isPending && (
-                          <div className="pending-label">Pending</div>
-                        )}
+                      <button key={r.id} className={cls} onClick={() => selectAndConfirm(r.id)}>
+                        <BrawlerImg src={r.image} name={r.name} size={44} className="recommendation-image" />
+                        <div className="recommendation-body">
+                          <div className="recommendation-top">
+                            <span className="recommendation-name">{r.name}</span>
+                            {tier === "must" && <span className="badge badge-must">MUST PICK</span>}
+                            {tier === "meta" && <span className="badge badge-meta">META</span>}
+                            {tier === "strong" && <span className="badge badge-strong">STRONG</span>}
+                            {tier === "flex" && <span className="badge badge-flex">FLEX</span>}
+                          </div>
+                          <p className="recommendation-explanation">
+                            {r.longExplanation}
+                          </p>
+                        </div>
                       </button>
                     );
                   })}
-
-                  {visibleBrawlers.length === 0 && (
-                    <div className="muted small">
-                      {state.phase === "bans"
-                        ? "No brawlers available (check bans / picks)."
-                        : state.phase === "picks" && currentPickInfo.pickingIsUs
-                        ? "No recommended picks – try searching by name."
-                        : "Enemy pick – input their choice on the left, then suggestions will resume on your turn."}
-                    </div>
-                  )}
-                </div>
-
-                <div className="recommendations-panel">
-                  <h3>Recommended picks</h3>
-                  <p className="muted">
-                    Suggestions using BSC 2026 competitive data, map mode, bans
-                    and comp shape.
-                  </p>
-
-                  {state.phase === "bans" && (
-                    <p className="muted small">
-                      Lock all six bans first — suggestions start once picks begin.
-                    </p>
-                  )}
-
-                  {state.phase === "picks" && !isOurTurn && (
-                    <p className="muted small">
-                      Waiting for enemy pick. Mirror their choice in the Enemy side
-                      column; we’ll refresh suggestions on your turn.
-                    </p>
-                  )}
-
-                  {isOurTurn && draftAnalysis && draftAnalysis.warnings.length > 0 && (
-                    <div className="draft-warnings">
-                      {draftAnalysis.warnings.map((w, i) => (
-                        <p key={i} className="draft-warning">⚠ {w}</p>
-                      ))}
-                    </div>
-                  )}
-
-                  {isOurTurn && draftAnalysis && draftAnalysis.needs.length > 0 && (
-                    <div className="draft-needs">
-                      <p className="muted small">
-                        Your team needs: <strong>{draftAnalysis.needs.join(", ")}</strong>
-                      </p>
-                    </div>
-                  )}
-
-                  {isOurTurn && recommendations.length === 0 && (
-                    <p className="muted small">
-                      No clear read yet. Try adding more picks or adjusting the bans.
-                    </p>
-                  )}
-
-                  {isOurTurn && recommendations.length > 0 && (
-                    <div className="recommendation-list">
-                      {recommendations.map((r) => {
-                        const tier = recommendationTiers.get(r.id);
-                        const cardClassNames = [
-                          "recommendation-card",
-                          tier === "must" ? "recommendation-card-must" : "",
-                          tier === "meta" ? "recommendation-card-meta" : "",
-                          tier === "strong"
-                            ? "recommendation-card-strong"
-                            : "",
-                          tier === "flex" ? "recommendation-card-flex" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ");
-
-                        return (
-                          <div key={r.id} className={cardClassNames}>
-                            <div className="recommendation-main">
-                              {r.image && (
-                                <img
-                                  src={r.image}
-                                  alt={r.name}
-                                  className="recommendation-image"
-                                />
-                              )}
-                              <div>
-                                <div className="recommendation-name">
-                                  {r.name}
-                                </div>
-                                <div className="tag-row">
-                                  {r.tags.map((t) => (
-                                    <span key={t} className="badge badge-tag">
-                                      {t}
-                                    </span>
-                                  ))}
-                                  {tier === "must" && (
-                                    <span className="badge badge-must">
-                                      MUST PICK
-                                    </span>
-                                  )}
-                                  {tier === "meta" && (
-                                    <span className="badge badge-meta">
-                                      META
-                                    </span>
-                                  )}
-                                  {tier === "strong" && (
-                                    <span className="badge badge-strong">
-                                      STRONG
-                                    </span>
-                                  )}
-                                  {tier === "flex" && (
-                                    <span className="badge badge-flex">
-                                      FLEX
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <button
-                              className="secondary-button"
-                              onClick={() => handleUseRecommendation(r.id)}
-                            >
-                              Use this pick
-                            </button>
-                            <p className="muted small">
-                              {advanced
-                                ? r.longExplanation
-                                : r.shortExplanation}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Final overview */}
-            {state.phase === "done" && (
-              <div className="final-overview">
-                <h3 className="final-title">Draft overview</h3>
-                <p className="muted small">
-                  Snapshot of the finished draft – use this as a quick mental
-                  warmup before the game loads.
-                </p>
+            {state.phase === "picks" && !isOurTurn && (
+              <div className="enemy-turn-notice">
+                Enemy is picking — select their choice from the grid below so coaching stays accurate.
+              </div>
+            )}
 
-                <div className="vs-layout">
-                  <div className="vs-side vs-side-our">
-                    <div className="vs-label">Your team</div>
-                    <div className="vs-team-row">
-                      {ourTeam.map((b) => (
-                        <div key={b.id} className="vs-slot">
-                          {b.image && <img src={b.image} alt={b.name} />}
-                          <div className="vs-slot-name">{b.name}</div>
-                        </div>
-                      ))}
-                    </div>
+            {/* ── Brawler Grid ── */}
+            {state.phase !== "done" && (
+              <div className="grid-section" ref={gridRef}>
+                <input
+                  type="text"
+                  value={state.search}
+                  onChange={(e) => setState((p) => ({ ...p, search: e.target.value }))}
+                  placeholder="Search brawler..."
+                  className="search-input"
+                />
+
+                {isSearching ? (
+                  <div className="brawler-grid brawler-grid-compact">
+                    {visibleBrawlers.map((b) => renderTile(b, state, takenSet, recommendationTiers, selectAndConfirm))}
                   </div>
-
-                  <div className="vs-side vs-side-enemy">
-                    <div className="vs-label">Enemy team</div>
-                    <div className="vs-team-row">
-                      {enemyTeam.map((b) => (
-                        <div key={b.id} className="vs-slot">
-                          {b.image && <img src={b.image} alt={b.name} />}
-                          <div className="vs-slot-name">{b.name}</div>
+                ) : (
+                  <div className="brawler-groups">
+                    {ROLE_ORDER.map((role) => {
+                      const group = groupedBrawlers[role];
+                      if (!group || group.length === 0) return null;
+                      return (
+                        <div key={role} className="brawler-role-group">
+                          <div className="role-group-header">
+                            <span className="role-group-label">{role}s</span>
+                            <span className="role-group-count">{group.length}</span>
+                          </div>
+                          <div className="brawler-grid brawler-grid-compact">
+                            {group.map((b) => renderTile(b, state, takenSet, recommendationTiers, selectAndConfirm))}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {winChance !== null && (
-                  <div className="vs-center">
-                    <div className="win-chance">
-                      Estimated win chance: {winChance}%
-                    </div>
-                    <div className="muted small">
-                      Based on bans, side and basic comp shape – not a guarantee,
-                      just a quick read.
-                    </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
             )}
-          </>
-        )}
-      </section>
+          </div>
+
+          {/* ── Post-Draft Analysis ── */}
+          {state.phase === "done" && postDraft && (
+            <section className="post-draft">
+              {/* Win probability */}
+              <div className="post-draft-header">
+                <h3>Draft Analysis</h3>
+                <div className="win-pct-row">
+                  <div className="win-pct-bar-container">
+                    <div className="win-pct-label-left">You</div>
+                    <div className="win-pct-bar">
+                      <div
+                        className={`win-pct-fill ${postDraft.winPct >= 55 ? "win-pct-favored" : postDraft.winPct <= 45 ? "win-pct-unfavored" : "win-pct-even"}`}
+                        style={{ width: `${postDraft.winPct}%` }}
+                      >
+                        <span className="win-pct-text">{postDraft.winPct}%</span>
+                      </div>
+                      <div className="win-pct-enemy-fill" style={{ width: `${100 - postDraft.winPct}%` }}>
+                        <span className="win-pct-text">{100 - postDraft.winPct}%</span>
+                      </div>
+                    </div>
+                    <div className="win-pct-label-right">Enemy</div>
+                  </div>
+                </div>
+                <p className="post-draft-verdict">{postDraft.verdict}</p>
+              </div>
+
+              {/* Final warnings */}
+              {draftAnalysis && draftAnalysis.warnings.length > 0 && (
+                <div className="live-feedback">
+                  {draftAnalysis.warnings.map((w, i) => (
+                    <div key={i} className="draft-warning">{w}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* How to play it */}
+              {postDraft.tips.length > 0 && (
+                <div className="how-to-play">
+                  <h3>How to play it</h3>
+                  <div className="tips-list">
+                    {postDraft.tips.map((t) => (
+                      <div key={t.id} className="tip-card">
+                        <div className="tip-card-header">
+                          <BrawlerImg src={t.image} name={t.name} size={36} className="tip-card-img" />
+                          <div>
+                            <div className="tip-card-name">{t.name}</div>
+                            <div className="tip-card-role">{t.role}</div>
+                          </div>
+                        </div>
+                        <ul className="tip-card-list">
+                          {t.tips.map((tip, i) => (
+                            <li key={i}>{tip}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="post-draft-actions">
+                <button className="primary-button" onClick={resetDraft}>New draft</button>
+              </div>
+            </section>
+          )}
+        </>
+      )}
     </div>
+  );
+}
+
+function renderTile(b, state, takenSet, recommendationTiers, onClick) {
+  const isPending = state.pendingPick === b.id;
+  const tier = recommendationTiers.get(b.id);
+  const cls = [
+    "brawler-tile",
+    takenSet.has(b.id) && "disabled",
+    tier && "recommended",
+    tier === "must" && "must",
+    tier === "meta" && "tier-meta",
+    tier === "strong" && "tier-strong",
+    tier === "flex" && "tier-flex",
+    isPending && "tile-pending",
+  ].filter(Boolean).join(" ");
+
+  return (
+    <button key={b.id} className={cls} onClick={() => onClick(b.id)} disabled={takenSet.has(b.id)}>
+      <BrawlerImg src={b.image} name={b.name} size={44} className="brawler-portrait" />
+      <div className="brawler-name">{b.name}</div>
+      {tier && !isPending && <span className={`tier-dot tier-dot-${tier}`} />}
+      {isPending && <div className="pending-label">PICK</div>}
+    </button>
   );
 }

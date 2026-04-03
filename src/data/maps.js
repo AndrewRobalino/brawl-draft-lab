@@ -33,11 +33,18 @@ export const MAPS = [
     traits: { walls: "moderate", lanes: 3, bushes: "heavy", openness: "closed", notes: "Heavy bush coverage makes assassins and invis brawlers strong. Ambush-heavy." },
   },
   {
-    id: "new_horizons",
-    name: "New Horizons",
+    id: "undermine",
+    name: "Undermine",
     mode: "Gem Grab",
-    image: "/assets/maps/new_horizons.png",
-    traits: { walls: "moderate", lanes: 3, bushes: "moderate", openness: "mixed", notes: "Balanced layout; versatile picks do well. Center is semi-open." },
+    image: "/assets/maps/undermine.png",
+    traits: { walls: "moderate", lanes: 3, bushes: "moderate", openness: "mixed", notes: "Balanced Gem Grab layout. Center gem mine with moderate cover. Versatile picks do well." },
+  },
+  {
+    id: "temple_ruins",
+    name: "Temple Ruins",
+    mode: "Gem Grab",
+    image: "/assets/maps/temple_ruins.png",
+    traits: { walls: "heavy", lanes: 3, bushes: "heavy", openness: "closed", notes: "Dense layout with heavy walls and bushes. Close range and assassins thrive. Throwers strong behind walls." },
   },
 
   // ---------- BRAWL BALL ----------
@@ -145,13 +152,6 @@ export const MAPS = [
     image: "/assets/maps/ring_of_fire.png",
     traits: { walls: "light", lanes: 3, bushes: "heavy", zones: 1, openness: "mixed", notes: "Single zone with large bush clusters across center. Few covers near zone. AoE and sustained damage thrive; bushes enable ambush plays." },
   },
-  {
-    id: "split",
-    name: "Split",
-    mode: "Hot Zone",
-    image: "/assets/maps/split.png",
-    traits: { walls: "heavy", lanes: 2, bushes: "moderate", zones: 2, openness: "closed", notes: "Two zones split by thick diagonal wall. Wall-jumpers and throwers can cross. Each team naturally controls one zone; contesting the second is key." },
-  },
 
   // ---------- KNOCKOUT ----------
   {
@@ -176,17 +176,10 @@ export const MAPS = [
     traits: { walls: "moderate", lanes: 3, bushes: "moderate", openness: "mixed", notes: "Balanced KO map. Mid-range brawlers and snipers both viable. Moderate cover." },
   },
   {
-    id: "dry_season",
-    name: "Dry Season",
+    id: "new_horizons",
+    name: "New Horizons",
     mode: "Knockout",
-    image: "/assets/maps/dry_season.png",
-    traits: { walls: "moderate", lanes: 3, bushes: "light", openness: "mixed", notes: "Semi-open with moderate walls. Long range slightly favored but flanks exist." },
-  },
-  {
-    id: "temple_ruins",
-    name: "Temple Ruins",
-    mode: "Knockout",
-    image: "/assets/maps/temple_ruins.png",
-    traits: { walls: "heavy", lanes: 3, bushes: "heavy", openness: "closed", notes: "Dense layout with heavy walls and bushes. Close range and assassins thrive. Throwers strong behind walls." },
+    image: "/assets/maps/new_horizons.png",
+    traits: { walls: "moderate", lanes: 3, bushes: "moderate", openness: "mixed", notes: "Balanced layout; versatile picks do well. Center is semi-open." },
   },
 ];
