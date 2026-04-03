@@ -23,6 +23,7 @@ html, body {
   margin: 0;
   padding: 0;
   background: var(--bg);
+  background-image: radial-gradient(ellipse at 50% 0%, rgba(212, 168, 67, 0.04) 0%, transparent 60%);
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   color: var(--text);
   line-height: 1.5;
@@ -33,7 +34,47 @@ h1, h2, h3, h4 { font-weight: 600; color: var(--text); margin: 0 0 0.5rem 0; }
 
 /* ── App Shell ─────────────────────────────────────────── */
 
-.app-shell { min-height: 100vh; background: var(--bg); }
+.app-shell {
+  min-height: 100vh;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Keep all content above the star layer */
+.app-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Starr Drop background — real 6-pointed starr drop shapes */
+.starr-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.starr-bg .s {
+  position: absolute;
+  background-image: url("/assets/starr-drop.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  /* Force gold tint: desaturate to grey, then sepia to warm, shift to gold */
+  filter: grayscale(1) sepia(1) hue-rotate(5deg) saturate(2) brightness(1.1);
+}
+
+/* Gentle twinkle animation */
+@keyframes twinkle {
+  0%, 100% { opacity: var(--o); transform: scale(1); }
+  50% { opacity: calc(var(--o) * 0.4); transform: scale(0.85); }
+}
+
+@keyframes twinkle-slow {
+  0%, 100% { opacity: var(--o); transform: scale(1) rotate(0deg); }
+  50% { opacity: calc(var(--o) * 0.5); transform: scale(0.9) rotate(15deg); }
+}
 
 .app-header {
   border-bottom: 1px solid var(--border);
@@ -103,6 +144,7 @@ h1, h2, h3, h4 { font-weight: 600; color: var(--text); margin: 0 0 0.5rem 0; }
   border-radius: 0.6rem;
   border: 1px solid var(--border);
   margin-bottom: 1rem;
+  box-shadow: 0 0 20px rgba(212, 168, 67, 0.06), 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
 /* ── Buttons ───────────────────────────────────────────── */
@@ -197,6 +239,7 @@ button { font-family: inherit; cursor: pointer; border: none; }
   padding: 2rem 1.25rem;
   text-align: center;
   color: var(--text-muted);
+  box-shadow: 0 0 20px rgba(212, 168, 67, 0.06), 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
 .intel-empty-icon {
@@ -212,11 +255,135 @@ button { font-family: inherit; cursor: pointer; border: none; }
 
 .intel-empty p { margin: 0 0 0.25rem; font-size: 0.82rem; }
 
+/* ── Meta Tier List (Ash-style stars) ────────────────── */
+
+.meta-tier-section {
+  margin-top: 1.25rem;
+}
+
+.meta-tier-list {
+  background: #1a1a1e;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 0 25px rgba(212, 168, 67, 0.08), 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.tier-list-header {
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tier-list-title {
+  font-weight: 800;
+  font-size: 1rem;
+  color: #e84040;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tier-list-sub {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tier-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  min-height: 56px;
+  padding: 0.4rem 0;
+}
+
+.tier-row:last-of-type {
+  border-bottom: none;
+}
+
+.tier-stars {
+  width: 72px;
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0.25rem 0.4rem;
+}
+
+.star {
+  color: #f5c542;
+  font-size: 0.85rem;
+  line-height: 1;
+  text-shadow: 0 0 6px rgba(245, 197, 66, 0.5);
+}
+
+/* Top tier stars glow stronger */
+.tier-row-6 .star {
+  font-size: 0.9rem;
+  text-shadow: 0 0 10px rgba(245, 197, 66, 0.7), 0 0 20px rgba(245, 197, 66, 0.3);
+}
+
+.tier-row-5 .star {
+  text-shadow: 0 0 8px rgba(245, 197, 66, 0.5);
+}
+
+.tier-row-2 .star,
+.tier-row-1 .star {
+  color: #8a7a3a;
+  text-shadow: none;
+}
+
+.tier-brawlers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.tier-brawler {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tier-brawler-img {
+  border-radius: 0.3rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.tier-brawler:hover .tier-brawler-img {
+  transform: scale(1.15);
+  border-color: var(--accent);
+  z-index: 2;
+}
+
+/* Tier-specific portrait borders */
+.tier-row-6 .tier-brawler-img {
+  border-color: rgba(245, 197, 66, 0.3);
+}
+
+.tier-row-5 .tier-brawler-img {
+  border-color: rgba(245, 197, 66, 0.15);
+}
+
+
 .intel-section {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.75rem;
+  box-shadow: 0 0 20px rgba(212, 168, 67, 0.06), 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
 .intel-header {
@@ -642,6 +809,7 @@ button { font-family: inherit; cursor: pointer; border: none; }
   cursor: pointer;
   transition: 0.12s ease;
   text-align: left;
+  color: var(--text);
 }
 
 .ban-suggestion-card:hover { background: var(--danger-soft); border-color: var(--danger); }
@@ -649,8 +817,8 @@ button { font-family: inherit; cursor: pointer; border: none; }
 
 .ban-suggestion-img { border-radius: 0.3rem; object-fit: cover; flex-shrink: 0; }
 .ban-suggestion-info { flex: 1; min-width: 0; }
-.ban-suggestion-name { font-weight: 600; font-size: 0.82rem; }
-.ban-suggestion-reason { font-size: 0.72rem; color: var(--text-muted); line-height: 1.3; }
+.ban-suggestion-name { font-weight: 600; font-size: 0.82rem; color: var(--danger); }
+.ban-suggestion-reason { font-size: 0.72rem; color: var(--text); line-height: 1.3; }
 
 /* ── Recommendations ───────────────────────────────────── */
 
@@ -679,6 +847,7 @@ button { font-family: inherit; cursor: pointer; border: none; }
   transition: 0.12s ease;
   text-align: left;
   width: 100%;
+  color: var(--text);
 }
 
 .recommendation-card:hover { background: rgba(212, 168, 67, 0.04); }
@@ -702,11 +871,15 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .recommendation-body { flex: 1; min-width: 0; }
 .recommendation-top { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
 .recommendation-name { font-weight: 600; font-size: 0.88rem; color: var(--text); }
+.recommendation-card-must .recommendation-name { color: var(--accent); }
+.recommendation-card-meta .recommendation-name { color: var(--accent); }
+.recommendation-card-strong .recommendation-name { color: var(--info); }
+.recommendation-card-flex .recommendation-name { color: var(--text-muted); }
 
 .recommendation-explanation {
   margin: 0.25rem 0 0;
   font-size: 0.78rem;
-  color: var(--text-muted);
+  color: var(--text);
   line-height: 1.4;
 }
 

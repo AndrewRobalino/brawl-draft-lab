@@ -30,7 +30,7 @@ const ROLE_DATA = {
   // --- Assassins ---
   mortis:    { roles: ["Assassin"], tags: ["Dash", "Buffy", "Lane killer"], antiTank: false },
   leon:      { roles: ["Assassin"], tags: ["Invis", "Buffy", "Clone swap", "Universal threat"], antiTank: false },
-  crow:      { roles: ["Assassin", "Control"], tags: ["Poison", "Buffy", "Bouncing kunai", "Nerfed Mar30"], antiTank: false },
+  crow:      { roles: ["Assassin", "Control"], tags: ["Poison", "Buffy", "Bouncing kunai", "Nerfed Mar30", "Long range"], antiTank: true },
   cordelius: { roles: ["Assassin"], tags: ["Shadow realm", "Anti-heal"], antiTank: true },
   edgar:     { roles: ["Assassin"], tags: ["Lifesteal jump"], antiTank: false },
   fang:      { roles: ["Assassin"], tags: ["Kick chain"], antiTank: false },
@@ -224,7 +224,7 @@ const HARD_COUNTERS = {
   // ── Tanks ── Clancy added broadly as conditional anti-tank after Mar 30 buffs
   frank:    ["colette", "spike", "emz", "bea", "clancy", "shelly", "mortis"],
   bibi:     ["colette", "spike", "emz", "bea", "clancy", "mortis"],
-  bull:     ["colette", "spike", "emz", "shelly", "bea", "clancy", "nita"],
+  bull:     ["colette", "spike", "emz", "shelly", "bea", "clancy", "nita", "crow"],
   el_primo: ["colette", "spike", "emz", "crow", "clancy", "darryl"],
   rosa:     ["colette", "spike", "emz", "clancy", "piper", "bea"],
   darryl:   ["spike", "emz", "shelly", "clancy", "mortis", "crow"],
@@ -594,7 +594,7 @@ function scoreBrawler({ id, map, meta, ourPicks, enemyPicks, draftAnalysis, enem
     // Open maps: sharpshooters + control thrive, tanks + assassins struggle
     if (SHARPSHOOTERS.has(id)) score += 2;
     if (TANKS.has(id)) score -= 3;
-    if (ASSASSINS.has(id) && !roleInfo.tags?.includes("Invis")) score -= 2; // invis assassins can still close gap
+    if (ASSASSINS.has(id) && !roleInfo.tags?.includes("Invis") && !roleInfo.tags?.includes("Long range")) score -= 2; // invis/ranged assassins can still function on open maps
     if (isCloseRange && !TANKS.has(id)) score -= 3; // close-range non-tanks (e.g. Shelly) are just as exposed on open maps
   } else if (traits.openness === "closed") {
     // Closed maps: tanks + assassins thrive, sharpshooters lose value
@@ -1374,4 +1374,35 @@ export function getBrawlerRole(id) {
 
 export function getAllRoles() {
   return ROLE_DATA;
+}
+
+// ============================================================
+// META TIER LIST — AshBS April 2026 Edition
+// Star rating system (6 = dominant, 1 = weak)
+// Display only — does NOT feed into engine scoring.
+// Engine uses BSC pro data, counters, synergies, and map logic.
+// ============================================================
+const META_TIERS = {
+  6: ["sirius", "pierce", "bull", "bibi", "leon", "crow", "mortis", "clancy", "chester", "najia", "emz"],
+  5: ["poco", "colt", "otis", "kaze", "kenji", "angelo", "amber", "cordelius", "lily", "gray", "byron", "rico", "frank", "gene", "gus", "nani", "nita", "bo", "charlie", "ruffs", "glowy", "mina", "brock", "ziggy", "spike"],
+  4: ["tara", "alli", "belle", "r_t", "penny", "janet", "meeple", "juju", "squeak", "piper", "shade", "shelly", "ollie", "pam", "max", "moe", "carl", "finx", "bea"],
+  3: ["willow", "jae_yong", "kit", "8_bit", "griff", "berry", "hank", "barley", "gigi", "melodie", "trunk", "buster", "sandy", "gale", "stu", "doug"],
+  2: ["dynamike", "buzz", "sprout", "fang", "pearl", "lumi", "tick", "mandy", "ash", "eve", "rosa", "draco", "meg", "lola", "bonnie", "mico", "darryl", "colette", "maisie", "lou"],
+  1: ["edgar", "el_primo", "grom", "jacky", "jessie", "chuck", "mr_p", "sam", "surge"],
+};
+
+export function getMetaTierList() {
+  const tiers = {};
+  for (const [stars, ids] of Object.entries(META_TIERS)) {
+    tiers[stars] = ids.map((id) => {
+      const brawler = BRAWLERS.find((b) => b.id === id);
+      return {
+        id,
+        name: brawler?.name || id,
+        image: brawler?.image || "",
+        role: ROLE_DATA[id]?.roles?.[0] || "Damage",
+      };
+    });
+  }
+  return tiers;
 }

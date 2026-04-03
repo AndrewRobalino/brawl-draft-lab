@@ -9,6 +9,7 @@ import {
   getModeIntel,
   getMapIntel,
   getPostDraftAnalysis,
+  getMetaTierList,
 } from "../logic/recommendationEngine";
 
 const MODES = ["Gem Grab", "Brawl Ball", "Bounty", "Heist", "Hot Zone", "Knockout"];
@@ -97,6 +98,7 @@ export function DraftSimulator() {
   const setupReady = state.firstPick !== null && !!state.mode && !!state.mapId;
 
   // ── Setup intel ──
+  const metaTiers = useMemo(() => getMetaTierList(), []);
   const modeIntel = useMemo(() => getModeIntel(state.mode), [state.mode]);
   const mapIntel = useMemo(() => getMapIntel(state.mapId), [state.mapId]);
 
@@ -186,7 +188,7 @@ export function DraftSimulator() {
       if (state.bans.length >= TOTAL_BANS) return;
       setState((prev) => {
         const bans = [...prev.bans, id];
-        return { ...prev, bans, pendingPick: null, phase: bans.length >= TOTAL_BANS ? "picks" : "bans" };
+        return { ...prev, bans, pendingPick: null, search: "", phase: bans.length >= TOTAL_BANS ? "picks" : "bans" };
       });
       return;
     }
@@ -199,7 +201,7 @@ export function DraftSimulator() {
       if (turnLetter === (prev.firstPick ? "A" : "B")) our.push(id);
       else enemy.push(id);
       const newTotal = our.length + enemy.length;
-      return { ...prev, ourPicks: our, enemyPicks: enemy, pendingPick: null, phase: newTotal >= 6 ? "done" : "picks" };
+      return { ...prev, ourPicks: our, enemyPicks: enemy, pendingPick: null, search: "", phase: newTotal >= 6 ? "done" : "picks" };
     });
   }
 
@@ -364,6 +366,34 @@ export function DraftSimulator() {
             )}
           </aside>
         </div>
+      )}
+
+      {/* ── Meta Tier List (always visible during setup) ── */}
+      {state.phase === "setup" && (
+        <section className="meta-tier-section">
+          <div className="meta-tier-list">
+            <div className="tier-list-header">
+              <span className="tier-list-title">Current Meta Tier List</span>
+              <span className="tier-list-sub">Apr. 2026</span>
+            </div>
+            {[6, 5, 4, 3, 2, 1].map((stars) => (
+              <div key={stars} className={`tier-row tier-row-${stars}`}>
+                <div className="tier-stars">
+                  {Array.from({ length: stars }).map((_, i) => (
+                    <span key={i} className="star">&#9733;</span>
+                  ))}
+                </div>
+                <div className="tier-brawlers">
+                  {(metaTiers[stars] || []).map((b) => (
+                    <div key={b.id} className="tier-brawler" title={b.name}>
+                      <BrawlerImg src={b.image} name={b.name} size={36} className="tier-brawler-img" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* ── LIVE DRAFT ── */}
